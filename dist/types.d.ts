@@ -1,0 +1,461 @@
+/**
+ * Approve tool call request. Responds to a toolApprovalRequested event.
+ */
+export interface ApproveToolCallRequest {
+    /**
+     * Conversation ID.
+     */
+    id?: string;
+    /**
+     * The tool call awaiting a decision, from the toolApprovalRequested event.
+     */
+    toolCallId?: string;
+}
+/**
+ * Continue conversation request.
+ */
+export interface ContinueConversationRequest {
+    /**
+     * Conversation ID.
+     */
+    id?: string;
+    /**
+     * The visitor's next message.
+     */
+    message: string;
+}
+/**
+ * Create conversation request. The session, tenant, subject, secrets, labels,
+ *  and pinned parameters all come from the presenting token's session — the
+ *  browser asserts nothing.
+ */
+export interface CreateConversationRequest {
+    /**
+     * The visitor's opening message.
+     */
+    message: string;
+}
+/**
+ * Deny tool call request. Responds to a toolApprovalRequested event.
+ */
+export interface DenyToolCallRequest {
+    /**
+     * Conversation ID.
+     */
+    id?: string;
+    /**
+     * The tool call awaiting a decision, from the toolApprovalRequested event.
+     */
+    toolCallId?: string;
+}
+/**
+ * Contains an arbitrary serialized message along with a @type that describes the type of the serialized message.
+ */
+export interface GoogleProtobufAny {
+    /**
+     * The type of the serialized message.
+     */
+    '@type'?: string;
+}
+/**
+ * Represents a dynamically typed value which can be either null, a number, a string, a boolean, a recursive struct value, or a list of values.
+ */
+export type GoogleProtobufValue = unknown;
+/**
+ * List conversation events response. Ordered oldest first.
+ */
+export interface ListConversationEventsResponse {
+    items?: Array<WidgetEvent>;
+    pagination?: Page;
+}
+/**
+ * List conversations response. Ordered by last activity, newest first.
+ */
+export interface ListConversationsResponse {
+    items?: Array<WidgetConversation>;
+    pagination?: Page;
+}
+/**
+ * Page carries pagination data for list responses. A deliberate local
+ *  duplicate of the api module's Page — this package imports nothing from
+ *  cadenya.api.v1 (see the workspace README).
+ */
+export interface Page {
+    /**
+     * Cursor for the next page. Empty when there are no further results.
+     */
+    nextCursor?: string;
+    /**
+     * Total number of items matching the request.
+     */
+    total?: number;
+}
+/**
+ * Set tool call content request. Lets the embedding page supply the result
+ *  of a bare tool call (one whose tool set has no execution adapter) — the
+ *  widget-session flavor of the reverse-harness pattern, where client-side
+ *  logic executes the tool and reports the result back. The result then
+ *  reaches the conversation as a toolResult event.
+ */
+export interface SetToolCallContentRequest {
+    /**
+     * Conversation ID.
+     */
+    id?: string;
+    /**
+     * The bare tool call to supply content for.
+     */
+    toolCallId?: string;
+    /**
+     * The tool call's result content.
+     */
+    content: string;
+}
+/**
+ * The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).
+ */
+export interface Status {
+    /**
+     * The status code, which should be an enum value of [google.rpc.Code][google.rpc.Code].
+     */
+    code?: number;
+    /**
+     * A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the [google.rpc.Status.details][google.rpc.Status.details] field, or localized by the client.
+     */
+    message?: string;
+    /**
+     * A list of messages that carry the error details.  There is a common set of message types for APIs to use.
+     */
+    details?: Array<GoogleProtobufAny>;
+}
+/**
+ * Submit conversation feedback request — the visitor's rating of a
+ *  conversation, mirroring internal objective feedback in slimmed form. Flows
+ *  into the same feedback machinery that scores agent variations.
+ */
+export interface SubmitConversationFeedbackRequest {
+    /**
+     * Conversation ID.
+     */
+    id?: string;
+    /**
+     * A score between -1.0 and 1.0. -1.0 is the worst, 0.0 neutral, 1.0 the
+     *  best — a thumbs-down/up UI maps to -1.0/1.0.
+     */
+    score: number;
+    /**
+     * Optional comment explaining the feedback.
+     */
+    comment?: string;
+}
+/**
+ * WidgetAssistantMessageEvent is a message from the agent. Content may
+ *  arrive incrementally: later events for the same turn replace earlier
+ *  partial content.
+ */
+export interface WidgetAssistantMessageEvent {
+    content: string;
+}
+/**
+ * WidgetCancelledEvent: the conversation was cancelled. Terminal.
+ */
+export interface WidgetCancelledEvent {
+}
+/**
+ * WidgetConfig is the widget's presentation configuration, served to the
+ *  browser before any session exists. Contains nothing sensitive: the widget
+ *  is identified by the hostname, and the edge has already enforced the
+ *  origin allowlist by the time this is served.
+ */
+export interface WidgetConfig {
+    /**
+     * Display name shown in the widget header.
+     */
+    displayName: string;
+}
+export type WidgetConversationState = 'STATE_UNSPECIFIED' | 'STATE_RESPONDING' | 'STATE_OPEN' | 'STATE_CLOSED';
+/**
+ * WidgetConversation is one conversation between the session's visitor and
+ *  the widget's agent. Conversations are scoped by the presenting token to the
+ *  VISITOR: a session with a subject sees that subject's conversations on this
+ *  widget; a session without one sees only the conversations it created
+ *  itself. A conversation id from outside that scope is indistinguishable from
+ *  one that does not exist. Tenant is a management-side grouping only — it is
+ *  never a read scope on this surface.
+ */
+export interface WidgetConversation {
+    id: string;
+    state: WidgetConversationState;
+    /**
+     * Server-derived display title (e.g. from the opening message).
+     */
+    title?: string;
+    createdAt: string;
+    /**
+     * When the conversation last saw a message or event.
+     */
+    lastActiveAt?: string;
+}
+/**
+ * WidgetErrorEvent reports a visitor-safe conversation error. The message is
+ *  sanitized; internal error detail never reaches the widget.
+ */
+export interface WidgetErrorEvent {
+    message: string;
+}
+/**
+ * WidgetEvent is the visitor-facing event vocabulary. It MIRRORS the internal
+ *  conversation event variants — same granularity, same discriminator names —
+ *  with slimmed messages holding exactly what a widget UI needs. Internal
+ *  events map to these through an explicit, exhaustive server-side projection;
+ *  internal-only types (context compaction, memory reads, sub-agent
+ *  bookkeeping) have no widget variant and are dropped. Nothing here carries
+ *  tool configuration, tool arguments, server identities, operator details,
+ *  or internal error strings.
+ */
+export type WidgetEvent = WidgetEvent_UserMessage | WidgetEvent_AssistantMessage | WidgetEvent_ToolApprovalRequested | WidgetEvent_ToolApproved | WidgetEvent_ToolDenied | WidgetEvent_ToolCalled | WidgetEvent_ToolResult | WidgetEvent_ToolError | WidgetEvent_Error | WidgetEvent_Cancelled | WidgetEvent_TimedOut;
+/**
+ * WidgetTimedOutEvent: the conversation timed out after inactivity. Terminal.
+ *  (There is no finalized variant: agents with structured output — the only
+ *  path to finalization — cannot be bound to widgets.)
+ */
+export interface WidgetTimedOutEvent {
+}
+/**
+ * WidgetToolApprovalRequestedEvent asks the visitor to approve or deny a
+ *  tool call before it runs. The tool reference lets the embedding UI render
+ *  a custom approval experience per tool; the visitor responds via the
+ *  approve/deny endpoints.
+ */
+export interface WidgetToolApprovalRequestedEvent {
+    /**
+     * The tool call awaiting a decision; pass it to the approve/deny endpoint.
+     */
+    toolCallId: string;
+    tool: WidgetToolReference;
+}
+/**
+ * WidgetToolApprovedEvent records that the pending tool call was approved.
+ */
+export interface WidgetToolApprovedEvent {
+    toolCallId: string;
+}
+/**
+ * WidgetToolCalledEvent reports that the agent invoked a tool. Arguments are
+ *  never included.
+ */
+export interface WidgetToolCalledEvent {
+    toolCallId: string;
+    tool: WidgetToolReference;
+}
+/**
+ * WidgetToolDeniedEvent records that the pending tool call was denied.
+ */
+export interface WidgetToolDeniedEvent {
+    toolCallId: string;
+}
+/**
+ * WidgetToolErrorEvent reports that a tool call failed. Internal error
+ *  detail never reaches the widget.
+ */
+export interface WidgetToolErrorEvent {
+    toolCallId: string;
+    tool: WidgetToolReference;
+}
+/**
+ * WidgetToolReference identifies the tool involved in a tool event — enough
+ *  for the embedding UI to label the activity and to register custom
+ *  renderers keyed by the tool's id or the customer's own external id.
+ *  Deliberately omitted: tool configuration, adapter details, and any server
+ *  identity.
+ */
+export interface WidgetToolReference {
+    /**
+     * Cadenya's canonical tool id.
+     */
+    id: string;
+    /**
+     * The tool's external id in the customer's namespace, when set.
+     */
+    externalId?: string;
+    /**
+     * The tool's name as the workspace configured it (e.g. "FetchOrderDetails").
+     */
+    name: string;
+}
+/**
+ * WidgetToolResultEvent reports that a tool call finished. Result content is
+ *  omitted by default and included only for tools the workspace has opted in
+ *  to sharing content with widget sessions.
+ */
+export interface WidgetToolResultEvent {
+    toolCallId: string;
+    tool: WidgetToolReference;
+    /**
+     * The tool's result, present only for tools opted in to sharing content
+     *  with widget sessions (a per-tool setting; default off). Arbitrary JSON
+     *  the embedding UI may render — chart data, cards, structured results.
+     */
+    content?: GoogleProtobufValue;
+}
+/**
+ * WidgetUserMessageEvent is a message from the visitor.
+ */
+export interface WidgetUserMessageEvent {
+    content: string;
+}
+export interface WidgetEvent_UserMessage {
+    type: 'userMessage';
+    userMessage: WidgetUserMessageEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_AssistantMessage {
+    type: 'assistantMessage';
+    assistantMessage: WidgetAssistantMessageEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_ToolApprovalRequested {
+    type: 'toolApprovalRequested';
+    toolApprovalRequested: WidgetToolApprovalRequestedEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_ToolApproved {
+    type: 'toolApproved';
+    toolApproved: WidgetToolApprovedEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_ToolDenied {
+    type: 'toolDenied';
+    toolDenied: WidgetToolDeniedEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_ToolCalled {
+    type: 'toolCalled';
+    toolCalled: WidgetToolCalledEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_ToolResult {
+    type: 'toolResult';
+    toolResult: WidgetToolResultEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_ToolError {
+    type: 'toolError';
+    toolError: WidgetToolErrorEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_Error {
+    type: 'error';
+    error: WidgetErrorEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_Cancelled {
+    type: 'cancelled';
+    cancelled: WidgetCancelledEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_TimedOut {
+    type: 'timedOut';
+    timedOut: WidgetTimedOutEvent;
+    /**
+     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+     *  `Last-Event-ID` on reconnect to resume without duplication.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+//# sourceMappingURL=types.d.ts.map

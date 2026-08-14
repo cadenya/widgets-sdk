@@ -1,0 +1,15 @@
+[
+  "README.md",
+  "api.md",
+  "package.json",
+  "src/client.ts",
+  "src/core/error.ts",
+  "src/core/http.ts",
+  "src/core/pagination.ts",
+  "src/core/sse.ts",
+  "src/index.ts",
+  "src/resources/config.ts",
+  "src/resources/conversations.ts",
+  "src/types.ts",
+  "tsconfig.json"
+]

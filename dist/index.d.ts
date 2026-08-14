@@ -1,0 +1,11 @@
+export { CadenyaWidgets, CadenyaWidgets as default } from './client.js';
+export type { ClientOptions } from './client.js';
+export { APIError, APIConnectionError, APIUserAbortError, APIRequestError, APIResponseError, APITimeoutError } from './core/error.js';
+export type { RequestOptions } from './core/http.js';
+export { Page } from './core/pagination.js';
+export { Stream } from './core/sse.js';
+export type { ServerSentEvent } from './core/sse.js';
+export * from './types.js';
+export * from './resources/config.js';
+export * from './resources/conversations.js';
+//# sourceMappingURL=index.d.ts.map
