@@ -11,6 +11,7 @@ export interface ServerSentEvent<T> {
 export declare class Stream<T> implements AsyncIterable<T> {
     private readonly response;
     private readonly signal?;
+    private readonly skipEvents;
     /**
      * The resume checkpoint: seeded from the id this stream was resumed with,
      * then updated by `id:` fields (persistent across events per the SSE
@@ -21,7 +22,7 @@ export declare class Stream<T> implements AsyncIterable<T> {
     private closed;
     private consumed;
     private activeReader;
-    constructor(response: Response, signal?: AbortSignal | undefined, resumedFrom?: string);
+    constructor(response: Response, signal?: AbortSignal | undefined, resumedFrom?: string, skipEvents?: readonly string[]);
     /**
      * Idempotent explicit close: cancels the underlying response body exactly
      * once and detaches deadline state. Safe before iteration (an opened but

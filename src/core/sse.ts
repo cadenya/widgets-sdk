@@ -30,6 +30,9 @@ export class Stream<T> implements AsyncIterable<T> {
     private readonly response: Response,
     private readonly signal?: AbortSignal,
     resumedFrom?: string,
+    // Transport-housekeeping event names (`event:` field) skipped without
+    // decoding; their `id:` fields still advance the resume checkpoint.
+    private readonly skipEvents: readonly string[] = [],
   ) {
     this.lastEventId = resumedFrom;
     this.releaseDeadline = takeStreamCleanup(response);
@@ -101,6 +104,10 @@ export class Stream<T> implements AsyncIterable<T> {
       dataLines = [];
       const name = eventName;
       eventName = undefined;
+      // Housekeeping frames (e.g. ping/open) never reach the consumer and
+      // never JSON-decode - but their id: has already advanced the resume
+      // checkpoint above.
+      if (name !== undefined && this.skipEvents.includes(name)) return undefined;
       let data: T;
       try {
         data = JSON.parse(raw) as T;

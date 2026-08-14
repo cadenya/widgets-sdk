@@ -8,6 +8,7 @@ import { takeStreamCleanup } from './http.js';
 export class Stream {
     response;
     signal;
+    skipEvents;
     /**
      * The resume checkpoint: seeded from the id this stream was resumed with,
      * then updated by `id:` fields (persistent across events per the SSE
@@ -18,9 +19,13 @@ export class Stream {
     closed = false;
     consumed = false;
     activeReader;
-    constructor(response, signal, resumedFrom) {
+    constructor(response, signal, resumedFrom, 
+    // Transport-housekeeping event names (`event:` field) skipped without
+    // decoding; their `id:` fields still advance the resume checkpoint.
+    skipEvents = []) {
         this.response = response;
         this.signal = signal;
+        this.skipEvents = skipEvents;
         this.lastEventId = resumedFrom;
         this.releaseDeadline = takeStreamCleanup(response);
     }
@@ -91,6 +96,11 @@ export class Stream {
             dataLines = [];
             const name = eventName;
             eventName = undefined;
+            // Housekeeping frames (e.g. ping/open) never reach the consumer and
+            // never JSON-decode - but their id: has already advanced the resume
+            // checkpoint above.
+            if (name !== undefined && this.skipEvents.includes(name))
+                return undefined;
             let data;
             try {
                 data = JSON.parse(raw);
