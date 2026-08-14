@@ -9,6 +9,14 @@ export class Conversations {
     }
     /**
      * List conversations
+     *
+     * @example
+     * ```ts
+     * const page = await client.conversations.list();
+     * for await (const item of page) {
+     *   // auto-fetches every page
+     * }
+     * ```
      */
     async list(params, options) {
         const _base = snapshotParams(params);
@@ -17,18 +25,40 @@ export class Conversations {
     }
     /**
      * Start a conversation
+     *
+     * @example
+     * ```ts
+     * const widgetConversation = await client.conversations.create({ message: 'sample' });
+     * ```
      */
-    async create(params, options) {
-        return this._client.request({ method: 'POST', path: `/v1/conversations`, body: { message: params.message } }, options);
+    create(params, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'POST', path: `/v1/conversations`, body: { message: params.message } };
+        }, options);
     }
     /**
      * Get a conversation
+     *
+     * @example
+     * ```ts
+     * const widgetConversation = await client.conversations.retrieve('_123');
+     * ```
      */
-    async retrieve(id, options) {
-        return this._client.request({ method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}` }, options);
+    retrieve(id, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}` };
+        }, options);
     }
     /**
      * List conversation events
+     *
+     * @example
+     * ```ts
+     * const page = await client.conversations.listEvents('_123');
+     * for await (const item of page) {
+     *   // auto-fetches every page
+     * }
+     * ```
      */
     async listEvents(id, params, options) {
         const _base = snapshotParams(params);
@@ -37,6 +67,14 @@ export class Conversations {
     }
     /**
      * Stream conversation events
+     *
+     * @example
+     * ```ts
+     * const stream = await client.conversations.streamEvents('_123');
+     * for await (const event of stream) {
+     *   // typed event payloads; housekeeping frames are skipped
+     * }
+     * ```
      */
     async streamEvents(id, options) {
         const response = await this._client.rawRequest({ method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, stream: true }, options);
@@ -44,33 +82,68 @@ export class Conversations {
     }
     /**
      * Submit conversation feedback
+     *
+     * @example
+     * ```ts
+     * await client.conversations.submitFeedback('_123', { score: 1.5 });
+     * ```
      */
-    async submitFeedback(id, params, options) {
-        await this._client.request({ method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/feedback`, body: { score: params.score, comment: params.comment }, void: true }, options);
+    submitFeedback(id, params, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/feedback`, body: { score: params.score, comment: params.comment }, void: true };
+        }, options);
     }
     /**
      * Approve a pending tool call
+     *
+     * @example
+     * ```ts
+     * await client.conversations.approveToolCall('_123', { toolCallId: 'tool_call_123' });
+     * ```
      */
-    async approveToolCall(id, params, options) {
-        await this._client.request({ method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/tool_calls/${pathSegment('toolCallId', params.toolCallId)}:approve`, void: true }, options);
+    approveToolCall(id, params, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/tool_calls/${pathSegment('toolCallId', params.toolCallId)}:approve`, void: true };
+        }, options);
     }
     /**
      * Deny a pending tool call
+     *
+     * @example
+     * ```ts
+     * await client.conversations.denyToolCall('_123', { toolCallId: 'tool_call_123' });
+     * ```
      */
-    async denyToolCall(id, params, options) {
-        await this._client.request({ method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/tool_calls/${pathSegment('toolCallId', params.toolCallId)}:deny`, void: true }, options);
+    denyToolCall(id, params, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/tool_calls/${pathSegment('toolCallId', params.toolCallId)}:deny`, void: true };
+        }, options);
     }
     /**
      * Supply a bare tool call's result
+     *
+     * @example
+     * ```ts
+     * await client.conversations.setToolCallContent('_123', { toolCallId: 'tool_call_123', content: 'sample' });
+     * ```
      */
-    async setToolCallContent(id, params, options) {
-        await this._client.request({ method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/tool_calls/${pathSegment('toolCallId', params.toolCallId)}:setContent`, body: { content: params.content }, void: true }, options);
+    setToolCallContent(id, params, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/tool_calls/${pathSegment('toolCallId', params.toolCallId)}:setContent`, body: { content: params.content }, void: true };
+        }, options);
     }
     /**
      * Send the next message
+     *
+     * @example
+     * ```ts
+     * const widgetConversation = await client.conversations.continue('_123', { message: 'sample' });
+     * ```
      */
-    async continue(id, params, options) {
-        return this._client.request({ method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}:continue`, body: { message: params.message } }, options);
+    continue(id, params, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}:continue`, body: { message: params.message } };
+        }, options);
     }
 }
 //# sourceMappingURL=conversations.js.map

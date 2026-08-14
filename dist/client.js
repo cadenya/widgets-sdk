@@ -20,6 +20,8 @@ export class CadenyaWidgets {
             timeout: options.timeout,
             defaultHeaders: { 'User-Agent': 'cadenyawidgets-typescript/0.1.0 (api 1.0)', ...options.defaultHeaders },
             fetch: options.fetch,
+            logger: options.logger,
+            logLevel: options.logLevel,
             defaults: {},
         });
         this.config = new Config(this._client);

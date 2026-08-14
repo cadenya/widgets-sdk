@@ -4,6 +4,7 @@ export { CadenyaWidgets, CadenyaWidgets as default } from './client.js';
 export type { ClientOptions } from './client.js';
 export { APIError, APIConnectionError, APIUserAbortError, APIRequestError, APIResponseError, APITimeoutError } from './core/error.js';
 export type { RequestOptions } from './core/http.js';
+export { APIPromise } from './core/http.js';
 export { Page } from './core/pagination.js';
 export { Stream } from './core/sse.js';
 export type { ServerSentEvent } from './core/sse.js';

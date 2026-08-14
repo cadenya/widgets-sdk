@@ -1,3 +1,4 @@
+import type { Logger, LogLevel } from './core/http.js';
 import { Config } from './resources/config.js';
 import { Conversations } from './resources/conversations.js';
 export interface ClientOptions {
@@ -18,6 +19,10 @@ export interface ClientOptions {
     defaultHeaders?: Record<string, string>;
     /** Custom fetch implementation. */
     fetch?: typeof fetch;
+    /** Destination for SDK logs. Defaults to `console`. */
+    logger?: Logger;
+    /** 'debug' | 'warn' (default) | 'off'. Never logs headers or bodies. */
+    logLevel?: LogLevel;
 }
 export declare class CadenyaWidgets {
     readonly config: Config;

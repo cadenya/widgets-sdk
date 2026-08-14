@@ -43,6 +43,14 @@ export interface RequestSpec {
   void?: boolean;
 }
 
+export type LogLevel = 'debug' | 'warn' | 'off';
+
+/** Minimal logger surface; `console` satisfies it. */
+export interface Logger {
+  debug(...args: unknown[]): void;
+  warn(...args: unknown[]): void;
+}
+
 export interface HttpClientOptions {
   baseURL: string;
   authHeader: () => Record<string, string>;
@@ -53,6 +61,14 @@ export interface HttpClientOptions {
   fetch?: typeof fetch;
   /** Client-level default values for prominent params (e.g. a tenant/scope id). */
   defaults?: Record<string, string | undefined>;
+  /** Destination for SDK logs. Defaults to `console`. */
+  logger?: Logger;
+  /**
+   * 'debug' logs every request/response line (method, path, status,
+   * duration — never headers or bodies); 'warn' (default) logs only
+   * retries; 'off' silences the SDK entirely.
+   */
+  logLevel?: LogLevel;
 }
 
 const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
@@ -153,6 +169,66 @@ interface Deadline {
   ms: number;
 }
 
+/**
+ * A lazily-parsing promise for one API call. Awaiting it (or `.then`) yields
+ * the decoded value exactly like a plain promise; `withResponse()` yields the
+ * decoded value together with the raw `Response` (status, headers); and
+ * `asResponse()` yields the raw `Response` WITHOUT consuming the body, so
+ * the caller owns reading it.
+ */
+export class APIPromise<T> implements Promise<T> {
+  private parsed: Promise<T> | undefined;
+
+  constructor(
+    private readonly responsePromise: Promise<Response>,
+    private readonly parseFn: (response: Response) => Promise<T>,
+    private readonly onRawAccess: () => void,
+  ) {}
+
+  /**
+   * The raw `Response` after status checking and retries; the body is NOT
+   * consumed. Reading the body (and its timing) becomes the caller's
+   * responsibility — the request deadline stops at header acquisition.
+   */
+  asResponse(): Promise<Response> {
+    return this.responsePromise.then((response) => {
+      this.onRawAccess();
+      return response;
+    });
+  }
+
+  /** The decoded value together with the `Response` its body came from. */
+  async withResponse(): Promise<{ data: T; response: Response }> {
+    const response = await this.responsePromise;
+    const data = await this.parse();
+    return { data, response };
+  }
+
+  private parse(): Promise<T> {
+    this.parsed ??= this.responsePromise.then(this.parseFn);
+    return this.parsed;
+  }
+
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.parse().then(onfulfilled, onrejected);
+  }
+
+  catch<TResult = never>(
+    onrejected?: ((reason: unknown) => TResult | PromiseLike<TResult>) | null,
+  ): Promise<T | TResult> {
+    return this.parse().catch(onrejected);
+  }
+
+  finally(onfinally?: (() => void) | null): Promise<T> {
+    return this.parse().finally(onfinally);
+  }
+
+  readonly [Symbol.toStringTag] = 'APIPromise';
+}
+
 export class HttpClient {
   private readonly baseURL: string;
   private readonly authHeader: () => Record<string, string>;
@@ -160,10 +236,23 @@ export class HttpClient {
   private readonly timeout: number;
   private readonly defaultHeaders: Record<string, string>;
   private readonly fetchFn: typeof fetch;
+  private readonly logger: Logger;
+  private readonly logLevel: LogLevel;
+
+  /** Method + path + status only — headers and bodies are never logged. */
+  private logDebug(...args: unknown[]): void {
+    if (this.logLevel === 'debug') this.logger.debug('[sdk]', ...args);
+  }
+
+  private logWarn(...args: unknown[]): void {
+    if (this.logLevel !== 'off') this.logger.warn('[sdk]', ...args);
+  }
   readonly defaults: Record<string, string | undefined>;
 
   constructor(options: HttpClientOptions) {
     this.defaults = options.defaults ?? {};
+    this.logger = options.logger ?? console;
+    this.logLevel = options.logLevel ?? 'warn';
     // Validate the STRUCTURE once: operation paths are appended to this
     // value, so a query/fragment/userinfo would silently swallow the
     // request path. Absolute http(s) with a host is required; a path
@@ -198,6 +287,62 @@ export class HttpClient {
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.defaultHeaders = options.defaultHeaders ?? {};
     this.fetchFn = options.fetch ?? fetch;
+  }
+
+  /**
+   * The APIPromise pipeline for JSON and void operations. The spec thunk
+   * runs inside the async context so synchronous setup failures (e.g. a
+   * missing client-default param) surface as rejections, exactly like the
+   * plain-promise path. The deadline spans fetch through decode; raw-access
+   * consumers release it at header acquisition and own body timing.
+   */
+  requestAPI<T>(makeSpec: () => RequestSpec, options: RequestOptions = {}): APIPromise<T> {
+    const deadline = this.deadline(options);
+    let spec: RequestSpec;
+    const responsePromise = (async () => {
+      try {
+        spec = makeSpec();
+        return await this.rawRequest(spec, { ...options, signal: deadline.signal });
+      } catch (err) {
+        deadline.settle();
+        deadline.release();
+        if (deadline.timedOut()) throw new APITimeoutError(deadline.ms);
+        throw err;
+      }
+    })();
+    const parseFn = async (response: Response): Promise<T> => {
+      try {
+        if (spec.void) {
+          void response.body?.cancel().catch(() => {});
+          return undefined as T;
+        }
+        if (response.status === 204) {
+          throw new APIResponseError(204, 'HTTP 204 where a JSON response was expected');
+        }
+        const text = await raceAbort(response.text(), deadline.signal);
+        if (text.trim() === '' || text.trim() === 'null') {
+          throw new APIResponseError(
+            response.status,
+            `HTTP ${response.status} with an empty or null body where a JSON response was expected`,
+          );
+        }
+        try {
+          return JSON.parse(text) as T;
+        } catch (err) {
+          throw new APIResponseError(response.status, 'response body is not valid JSON', err);
+        }
+      } catch (err) {
+        if (deadline.timedOut()) throw new APITimeoutError(deadline.ms);
+        throw err;
+      } finally {
+        deadline.settle();
+        deadline.release();
+      }
+    };
+    return new APIPromise<T>(responsePromise, parseFn, () => {
+      deadline.settle();
+      deadline.release();
+    });
   }
 
   async request<T>(spec: RequestSpec, options: RequestOptions = {}): Promise<T> {
@@ -286,7 +431,9 @@ export class HttpClient {
           : 0,
     );
 
+    const startedAt = Date.now();
     for (let attempt = 0; ; attempt++) {
+      this.logDebug(`-> ${spec.method} ${spec.path}`, attempt > 0 ? `(attempt ${attempt + 1})` : '');
       let response: Response;
       try {
         response = await raceAbort(
@@ -310,6 +457,7 @@ export class HttpClient {
           throw new APIUserAbortError();
         }
         if (attempt < maxRetries) {
+          this.logWarn(`retrying ${spec.method} ${spec.path} after connection error (attempt ${attempt + 1}/${maxRetries + 1})`);
           await sleep(backoffMs(attempt, undefined), signal);
           if (streamDeadline?.timedOut()) {
             streamDeadline.settle();
@@ -327,6 +475,7 @@ export class HttpClient {
       }
 
       if (response.ok) {
+        this.logDebug(`<- ${response.status} ${spec.method} ${spec.path} (${Date.now() - startedAt}ms)`);
         // Response headers acquired: the stream body is now unbounded. The
         // forwarding listener stays attached (caller abort must reach the
         // body); the Stream releases it at its terminal state.
@@ -338,6 +487,7 @@ export class HttpClient {
       }
 
       if (RETRYABLE_STATUS.has(response.status) && attempt < maxRetries) {
+        this.logWarn(`retrying ${spec.method} ${spec.path} after HTTP ${response.status} (attempt ${attempt + 1}/${maxRetries + 1})`);
         // Release the discarded response so its connection can be reused.
         void response.body?.cancel().catch(() => {});
         await sleep(backoffMs(attempt, response.headers.get('retry-after')), signal);

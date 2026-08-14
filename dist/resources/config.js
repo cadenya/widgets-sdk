@@ -6,9 +6,16 @@ export class Config {
     }
     /**
      * Get widget config
+     *
+     * @example
+     * ```ts
+     * const widgetConfig = await client.config.retrieveWidget();
+     * ```
      */
-    async retrieveWidget(options) {
-        return this._client.request({ method: 'GET', path: `/v1/config` }, options);
+    retrieveWidget(options) {
+        return this._client.requestAPI(() => {
+            return { method: 'GET', path: `/v1/config` };
+        }, options);
     }
 }
 //# sourceMappingURL=config.js.map
