@@ -4,6 +4,13 @@
  * backoff, timeouts, and error mapping.
  */
 export interface RequestOptions {
+    /**
+     * Auto-reconnect for SSE streams (default true): a mid-stream transport
+     * drop resumes from the last received event id, like EventSource. Clean
+     * stream end, close(), and abort never reconnect. Set false to surface
+     * drops as APIConnectionError instead.
+     */
+    reconnect?: boolean;
     headers?: Record<string, string>;
     signal?: AbortSignal;
     maxRetries?: number;

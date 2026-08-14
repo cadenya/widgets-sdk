@@ -77,8 +77,9 @@ export class Conversations {
      * ```
      */
     async streamEvents(id, options) {
-        const response = await this._client.rawRequest({ method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, stream: true }, options);
-        return new Stream(response, options?.signal, options?.lastEventId, ['ping', 'open']);
+        const _spec = { method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, stream: true };
+        const response = await this._client.rawRequest(_spec, options);
+        return new Stream(response, options?.signal, options?.lastEventId, ['ping', 'open'], options?.reconnect === false ? undefined : (lastEventId) => this._client.rawRequest(_spec, { ...options, lastEventId }));
     }
     /**
      * Submit conversation feedback

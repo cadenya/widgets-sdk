@@ -21,18 +21,26 @@ export class Stream<T> implements AsyncIterable<T> {
    */
   lastEventId: string | undefined;
 
-  private readonly releaseDeadline: (() => void) | undefined;
+  private releaseDeadline: (() => void) | undefined;
+  /** Server `retry:` hint (ms), used as the reconnection delay when set. */
+  private retryHintMs: number | undefined;
   private closed = false;
   private consumed = false;
   private activeReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
   constructor(
-    private readonly response: Response,
+    private response: Response,
     private readonly signal?: AbortSignal,
     resumedFrom?: string,
     // Transport-housekeeping event names (`event:` field) skipped without
     // decoding; their `id:` fields still advance the resume checkpoint.
     private readonly skipEvents: readonly string[] = [],
+    // Re-issues the request with the current resume checkpoint. When set,
+    // a MID-STREAM transport drop reconnects automatically (like the
+    // platform's EventSource): bounded attempts, backoff honoring the
+    // server's `retry:` hint, counter reset once events flow again. A clean
+    // EOF, an explicit close(), and a caller abort NEVER reconnect.
+    private readonly reconnect?: (lastEventId: string | undefined) => Promise<Response>,
   ) {
     this.lastEventId = resumedFrom;
     this.releaseDeadline = takeStreamCleanup(response);
@@ -89,14 +97,62 @@ export class Stream<T> implements AsyncIterable<T> {
       );
     }
     this.consumed = true;
-    const body = this.response.body;
-    if (!body) throw new Error('SSE response has no body');
+    const firstBody = this.response.body;
+    if (!firstBody) throw new Error('SSE response has no body');
     const decoder = new TextDecoder();
-    const reader = body.getReader();
+    let reader = firstBody.getReader();
     this.activeReader = reader;
     let buffer = '';
     let dataLines: string[] = [];
     let eventName: string | undefined;
+    // Consecutive failed reconnects; reset whenever a chunk arrives.
+    let reconnectAttempts = 0;
+    const MAX_RECONNECTS = 5;
+
+    // A mid-stream transport drop swaps in a fresh connection resumed from
+    // the checkpoint. Partial buffered lines from the dead connection are
+    // DISCARDED — the server re-sends everything after Last-Event-ID.
+    const tryReconnect = async (): Promise<boolean> => {
+      while (this.reconnect && !this.closed && !this.signal?.aborted && reconnectAttempts < MAX_RECONNECTS) {
+        const delay = this.retryHintMs ?? Math.min(500 * 2 ** reconnectAttempts, 10_000);
+        reconnectAttempts++;
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, delay);
+          this.signal?.addEventListener('abort', () => {
+            clearTimeout(timer);
+            resolve();
+          }, { once: true });
+        });
+        if (this.closed || this.signal?.aborted) return false;
+        let next: Response;
+        try {
+          next = await this.reconnect(this.lastEventId);
+        } catch (err) {
+          // A TRANSPORT handshake failure (server restarting, connection
+          // refused) consumes budget and retries; an HTTP-level failure
+          // (e.g. expired credentials -> APIError) propagates immediately —
+          // reconnecting cannot fix it and must not mask it.
+          if (err instanceof APIConnectionError) continue;
+          throw err;
+        }
+        if (this.closed) {
+          void next.body?.cancel().catch(() => {});
+          return false;
+        }
+        this.releaseDeadline?.();
+        this.response = next;
+        this.releaseDeadline = takeStreamCleanup(next);
+        const nextBody = next.body;
+        if (!nextBody) throw new Error('SSE response has no body');
+        reader = nextBody.getReader();
+        this.activeReader = reader;
+        buffer = '';
+        dataLines = [];
+        eventName = undefined;
+        return true;
+      }
+      return false;
+    };
 
     const flush = (): ServerSentEvent<T> | undefined => {
       if (dataLines.length === 0) return undefined;
@@ -172,7 +228,10 @@ export class Stream<T> implements AsyncIterable<T> {
             this.lastEventId = value === '' ? undefined : value;
           }
           break;
-        // `retry` is a reconnection hint; single-shot streams ignore it.
+        case 'retry':
+          // Reconnection-delay hint; honored when auto-reconnect is active.
+          if (/^[0-9]+$/.test(value)) this.retryHintMs = Math.min(Number(value), 60_000);
+          break;
       }
       return undefined;
     };
@@ -188,17 +247,22 @@ export class Stream<T> implements AsyncIterable<T> {
           // A user abort mid-read surfaces as a raw AbortError DOMException;
           // the public contract is APIUserAbortError regardless of when the
           // abort lands. Partial buffered events are NOT flushed. Any other
-          // read failure is a transport failure — the public contract is
-          // APIConnectionError before AND after response headers, never a
-          // runtime-specific error shape.
+          // read failure is a transport failure — auto-reconnect resumes
+          // from the checkpoint when configured; otherwise the public
+          // contract is APIConnectionError before AND after response
+          // headers, never a runtime-specific error shape.
           if (this.signal?.aborted) throw new APIUserAbortError();
           if (this.closed) break;
+          if (await tryReconnect()) continue;
+          if (this.closed || this.signal?.aborted) break;
           throw new APIConnectionError(err);
         }
         // Re-check AFTER every awaited read: a chunk that arrives
         // concurrently with close() must not be processed.
         if (this.closed) break;
         if (done) break;
+        // Bytes flowing again: the reconnect budget is per-outage.
+        reconnectAttempts = 0;
         buffer += decoder.decode(value, { stream: true });
 
         let line: string | null;
@@ -237,7 +301,8 @@ export class Stream<T> implements AsyncIterable<T> {
       }
       reader.releaseLock();
       try {
-        await body.cancel();
+        // The CURRENT connection's body (reconnects swap this.response).
+        await this.response.body?.cancel();
       } catch {
         // Already closed.
       }

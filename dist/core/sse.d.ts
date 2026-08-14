@@ -9,20 +9,23 @@ export interface ServerSentEvent<T> {
     id: string | undefined;
 }
 export declare class Stream<T> implements AsyncIterable<T> {
-    private readonly response;
+    private response;
     private readonly signal?;
     private readonly skipEvents;
+    private readonly reconnect?;
     /**
      * The resume checkpoint: seeded from the id this stream was resumed with,
      * then updated by `id:` fields (persistent across events per the SSE
      * spec). Pass it as `options.lastEventId` to resume after a disconnect.
      */
     lastEventId: string | undefined;
-    private readonly releaseDeadline;
+    private releaseDeadline;
+    /** Server `retry:` hint (ms), used as the reconnection delay when set. */
+    private retryHintMs;
     private closed;
     private consumed;
     private activeReader;
-    constructor(response: Response, signal?: AbortSignal | undefined, resumedFrom?: string, skipEvents?: readonly string[]);
+    constructor(response: Response, signal?: AbortSignal | undefined, resumedFrom?: string, skipEvents?: readonly string[], reconnect?: ((lastEventId: string | undefined) => Promise<Response>) | undefined);
     /**
      * Idempotent explicit close: cancels the underlying response body exactly
      * once and detaches deadline state. Safe before iteration (an opened but
