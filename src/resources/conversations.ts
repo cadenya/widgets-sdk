@@ -157,7 +157,7 @@ export class Conversations {
   async streamEvents(id: string, options?: RequestOptions): Promise<Stream<WidgetEvent>> {
     const _spec: RequestSpec = { method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, stream: true };
     const response = await this._client.rawRequest(_spec, options);
-    return new Stream<WidgetEvent>(response, options?.signal, options?.lastEventId, ['ping', 'open'], options?.reconnect === false ? undefined : (lastEventId) => this._client.rawRequest(_spec, { ...options, lastEventId }));
+    return new Stream<WidgetEvent>(response, options?.signal, options?.lastEventId, ['ping', 'open'], options?.reconnect === false ? undefined : (lastEventId, signal) => this._client.rawRequest(_spec, { ...options, lastEventId, signal }));
   }
 
   /**

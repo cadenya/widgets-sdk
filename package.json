@@ -1,6 +1,6 @@
 {
   "name": "@cadenya/widgets",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "The official TypeScript SDK for the CadenyaWidgets API",
   "license": "UNLICENSED",
   "type": "module",
@@ -13,6 +13,7 @@
     }
   },
   "sideEffects": false,
+  "publishConfig": { "access": "public" },
   "engines": {
     "node": ">=18"
   },

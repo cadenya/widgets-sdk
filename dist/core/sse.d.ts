@@ -22,10 +22,13 @@ export declare class Stream<T> implements AsyncIterable<T> {
     private releaseDeadline;
     /** Server `retry:` hint (ms), used as the reconnection delay when set. */
     private retryHintMs;
+    /** Stream-owned cancellation: close() trips it so backoff sleeps and
+     * in-flight reconnect handshakes settle immediately. */
+    private readonly closer;
     private closed;
     private consumed;
     private activeReader;
-    constructor(response: Response, signal?: AbortSignal | undefined, resumedFrom?: string, skipEvents?: readonly string[], reconnect?: ((lastEventId: string | undefined) => Promise<Response>) | undefined);
+    constructor(response: Response, signal?: AbortSignal | undefined, resumedFrom?: string, skipEvents?: readonly string[], reconnect?: ((lastEventId: string | undefined, signal: AbortSignal) => Promise<Response>) | undefined);
     /**
      * Idempotent explicit close: cancels the underlying response body exactly
      * once and detaches deadline state. Safe before iteration (an opened but

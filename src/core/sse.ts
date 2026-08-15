@@ -24,6 +24,9 @@ export class Stream<T> implements AsyncIterable<T> {
   private releaseDeadline: (() => void) | undefined;
   /** Server `retry:` hint (ms), used as the reconnection delay when set. */
   private retryHintMs: number | undefined;
+  /** Stream-owned cancellation: close() trips it so backoff sleeps and
+   * in-flight reconnect handshakes settle immediately. */
+  private readonly closer = new AbortController();
   private closed = false;
   private consumed = false;
   private activeReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -40,7 +43,10 @@ export class Stream<T> implements AsyncIterable<T> {
     // platform's EventSource): bounded attempts, backoff honoring the
     // server's `retry:` hint, counter reset once events flow again. A clean
     // EOF, an explicit close(), and a caller abort NEVER reconnect.
-    private readonly reconnect?: (lastEventId: string | undefined) => Promise<Response>,
+    private readonly reconnect?: (
+      lastEventId: string | undefined,
+      signal: AbortSignal,
+    ) => Promise<Response>,
   ) {
     this.lastEventId = resumedFrom;
     this.releaseDeadline = takeStreamCleanup(response);
@@ -55,6 +61,7 @@ export class Stream<T> implements AsyncIterable<T> {
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
+    this.closer.abort();
     if (this.activeReader) {
       // The body is LOCKED to the active reader: body.cancel() would
       // reject, silently doing nothing. Cancel the reader itself — the
@@ -99,7 +106,10 @@ export class Stream<T> implements AsyncIterable<T> {
     this.consumed = true;
     const firstBody = this.response.body;
     if (!firstBody) throw new Error('SSE response has no body');
-    const decoder = new TextDecoder();
+    // Connection-local: a reconnect swaps in a FRESH decoder, so a partial
+    // UTF-8 code point from the dead connection cannot corrupt the first
+    // resumed event.
+    let decoder = new TextDecoder();
     let reader = firstBody.getReader();
     this.activeReader = reader;
     let buffer = '';
@@ -116,18 +126,26 @@ export class Stream<T> implements AsyncIterable<T> {
       while (this.reconnect && !this.closed && !this.signal?.aborted && reconnectAttempts < MAX_RECONNECTS) {
         const delay = this.retryHintMs ?? Math.min(500 * 2 ** reconnectAttempts, 10_000);
         reconnectAttempts++;
+        // Abortable sleep: BOTH the caller's signal and the stream's own
+        // closer wake it, and listeners are removed on every exit path so a
+        // long-lived flapping stream cannot accumulate them.
         await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, delay);
-          this.signal?.addEventListener('abort', () => {
+          const finish = () => {
             clearTimeout(timer);
+            this.signal?.removeEventListener('abort', finish);
+            this.closer.signal.removeEventListener('abort', finish);
             resolve();
-          }, { once: true });
+          };
+          const timer = setTimeout(finish, delay);
+          this.signal?.addEventListener('abort', finish);
+          this.closer.signal.addEventListener('abort', finish);
         });
         if (this.closed || this.signal?.aborted) return false;
         let next: Response;
         try {
-          next = await this.reconnect(this.lastEventId);
+          next = await this.reconnect(this.lastEventId, this.closer.signal);
         } catch (err) {
+          if (this.closed) return false;
           // A TRANSPORT handshake failure (server restarting, connection
           // refused) consumes budget and retries; an HTTP-level failure
           // (e.g. expired credentials -> APIError) propagates immediately —
@@ -139,6 +157,14 @@ export class Stream<T> implements AsyncIterable<T> {
           void next.body?.cancel().catch(() => {});
           return false;
         }
+        // Release the SUPERSEDED connection completely: cancel its reader
+        // (unlocking the old body) and its deadline cleanup, exactly once.
+        try {
+          await reader.cancel();
+        } catch {
+          // Dead reader.
+        }
+        reader.releaseLock();
         this.releaseDeadline?.();
         this.response = next;
         this.releaseDeadline = takeStreamCleanup(next);
@@ -149,6 +175,7 @@ export class Stream<T> implements AsyncIterable<T> {
         buffer = '';
         dataLines = [];
         eventName = undefined;
+        decoder = new TextDecoder();
         return true;
       }
       return false;

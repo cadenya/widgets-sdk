@@ -1,0 +1,24 @@
+# Publishes @cadenya/widgets to npm when a GitHub release is created
+# (or manually via workflow_dispatch). Requires the NPM_TOKEN secret
+# (granular automation token with publish access to @cadenya).
+name: Publish NPM
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: https://registry.npmjs.org
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

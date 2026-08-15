@@ -53,6 +53,34 @@ for await (const item of page) {
 }
 ```
 
+## Raw response access
+
+Plain methods return an `APIPromise`: awaiting yields the decoded value;
+`.withResponse()` pairs it with the `Response` (status, headers);
+`.asResponse()` — called synchronously, before any `await` — yields the raw
+`Response` with the body UNCONSUMED, so you own reading it:
+
+```ts
+const { data, response } = await client.config.retrieveWidget().withResponse();
+console.log(response.status, response.headers.get('x-request-id'));
+
+const raw = await client.config.retrieveWidget().asResponse();
+const body = await raw.text();
+```
+
+A dropped (never-awaited) call still cleans up after itself: the response
+is consumed and the request deadline is released automatically.
+
+## Logging
+
+```ts
+const client = new CadenyaWidgets({ logLevel: 'debug' }); // or logger: myLogger
+```
+
+`'warn'` (default) logs only retries; `'debug'` adds one line per request
+and response (method, path, status, duration); `'off'` silences the SDK.
+Headers and bodies are NEVER logged.
+
 ## Streaming (SSE)
 
 A stream wraps one HTTP response body, so it can be consumed **once**, with
@@ -75,10 +103,16 @@ for await (const { data, id } of envelopes.events()) {
 }
 ```
 
+Streams RECONNECT AUTOMATICALLY on mid-stream transport drops (like
+EventSource): they resume from the last received event id, retry at most 5
+times per outage with backoff (honoring the server's `retry:` hint), and
+reset the budget once events flow again. A clean stream end, `close()`, and
+a caller abort never reconnect; HTTP-level reconnect failures (e.g. expired
+credentials) surface immediately. Opt out with `{ reconnect: false }` in
+request options — then drops raise `APIConnectionError` and you can resume
+manually:
+
 ```ts
-// Resume after a disconnect: the checkpoint persists per the SSE spec.
-// Consume (or close) every opened stream — an unconsumed stream holds its
-// connection until `close()`.
 const resumed = await client.conversations.streamEvents(id, params, {
   lastEventId: stream.lastEventId,
 });
@@ -90,6 +124,9 @@ try {
   await resumed.close();
 }
 ```
+
+Consume (or close) every opened stream — an unconsumed stream holds its
+connection until `close()`.
 
 ## Reference
 

@@ -19,6 +19,9 @@ export class Stream {
     releaseDeadline;
     /** Server `retry:` hint (ms), used as the reconnection delay when set. */
     retryHintMs;
+    /** Stream-owned cancellation: close() trips it so backoff sleeps and
+     * in-flight reconnect handshakes settle immediately. */
+    closer = new AbortController();
     closed = false;
     consumed = false;
     activeReader;
@@ -49,6 +52,7 @@ export class Stream {
         if (this.closed)
             return;
         this.closed = true;
+        this.closer.abort();
         if (this.activeReader) {
             // The body is LOCKED to the active reader: body.cancel() would
             // reject, silently doing nothing. Cancel the reader itself — the
@@ -93,7 +97,10 @@ export class Stream {
         const firstBody = this.response.body;
         if (!firstBody)
             throw new Error('SSE response has no body');
-        const decoder = new TextDecoder();
+        // Connection-local: a reconnect swaps in a FRESH decoder, so a partial
+        // UTF-8 code point from the dead connection cannot corrupt the first
+        // resumed event.
+        let decoder = new TextDecoder();
         let reader = firstBody.getReader();
         this.activeReader = reader;
         let buffer = '';
@@ -109,20 +116,29 @@ export class Stream {
             while (this.reconnect && !this.closed && !this.signal?.aborted && reconnectAttempts < MAX_RECONNECTS) {
                 const delay = this.retryHintMs ?? Math.min(500 * 2 ** reconnectAttempts, 10_000);
                 reconnectAttempts++;
+                // Abortable sleep: BOTH the caller's signal and the stream's own
+                // closer wake it, and listeners are removed on every exit path so a
+                // long-lived flapping stream cannot accumulate them.
                 await new Promise((resolve) => {
-                    const timer = setTimeout(resolve, delay);
-                    this.signal?.addEventListener('abort', () => {
+                    const finish = () => {
                         clearTimeout(timer);
+                        this.signal?.removeEventListener('abort', finish);
+                        this.closer.signal.removeEventListener('abort', finish);
                         resolve();
-                    }, { once: true });
+                    };
+                    const timer = setTimeout(finish, delay);
+                    this.signal?.addEventListener('abort', finish);
+                    this.closer.signal.addEventListener('abort', finish);
                 });
                 if (this.closed || this.signal?.aborted)
                     return false;
                 let next;
                 try {
-                    next = await this.reconnect(this.lastEventId);
+                    next = await this.reconnect(this.lastEventId, this.closer.signal);
                 }
                 catch (err) {
+                    if (this.closed)
+                        return false;
                     // A TRANSPORT handshake failure (server restarting, connection
                     // refused) consumes budget and retries; an HTTP-level failure
                     // (e.g. expired credentials -> APIError) propagates immediately —
@@ -135,6 +151,15 @@ export class Stream {
                     void next.body?.cancel().catch(() => { });
                     return false;
                 }
+                // Release the SUPERSEDED connection completely: cancel its reader
+                // (unlocking the old body) and its deadline cleanup, exactly once.
+                try {
+                    await reader.cancel();
+                }
+                catch {
+                    // Dead reader.
+                }
+                reader.releaseLock();
                 this.releaseDeadline?.();
                 this.response = next;
                 this.releaseDeadline = takeStreamCleanup(next);
@@ -146,6 +171,7 @@ export class Stream {
                 buffer = '';
                 dataLines = [];
                 eventName = undefined;
+                decoder = new TextDecoder();
                 return true;
             }
             return false;

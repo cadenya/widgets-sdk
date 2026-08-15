@@ -86,6 +86,7 @@ export declare class APIPromise<T> implements Promise<T> {
     private readonly parseFn;
     private readonly onRawAccess;
     private parsed;
+    private observedRaw;
     constructor(responsePromise: Promise<Response>, parseFn: (response: Response) => Promise<T>, onRawAccess: () => void);
     /**
      * The raw `Response` after status checking and retries; the body is NOT

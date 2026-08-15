@@ -185,12 +185,24 @@ interface Deadline {
  */
 export class APIPromise<T> implements Promise<T> {
   private parsed: Promise<T> | undefined;
+  private observedRaw = false;
 
   constructor(
     private readonly responsePromise: Promise<Response>,
     private readonly parseFn: (response: Response) => Promise<T>,
     private readonly onRawAccess: () => void,
-  ) {}
+  ) {
+    // A dropped return value must still reach terminal cleanup: the request
+    // has already been sent, so unless raw access claims the body FIRST
+    // (synchronously, before any await), parsing starts on the next
+    // microtask — consuming the body and settling the deadline timer even
+    // when the caller never observes the promise. Rejections on this
+    // internal branch are swallowed; a caller who later awaits still gets
+    // them from the memoized parse.
+    queueMicrotask(() => {
+      if (!this.observedRaw) this.parse().catch(() => {});
+    });
+  }
 
   /**
    * The raw `Response` after status checking and retries; the body is NOT
@@ -198,6 +210,11 @@ export class APIPromise<T> implements Promise<T> {
    * responsibility — the request deadline stops at header acquisition.
    */
   asResponse(): Promise<Response> {
+    // Must be called synchronously after the request (before any await):
+    // it claims body ownership away from the auto-parse safety net. Mixing
+    // a LATE asResponse() with parsed access yields a response whose body
+    // was already consumed by parsing — status/headers stay usable.
+    this.observedRaw = true;
     return this.responsePromise.then((response) => {
       this.onRawAccess();
       return response;
