@@ -1,8 +1,8 @@
 {
   "name": "@cadenya/widgets",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "The official TypeScript SDK for the CadenyaWidgets API",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -14,6 +14,7 @@
   },
   "sideEffects": false,
   "publishConfig": { "access": "public" },
+  "repository": { "type": "git", "url": "https://github.com/cadenya/widgets-sdk" },
   "engines": {
     "node": ">=18"
   },
