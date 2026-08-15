@@ -1,6 +1,7 @@
-# Publishes @cadenya/widgets to npm when a GitHub release is created
-# (or manually via workflow_dispatch). Requires the NPM_TOKEN secret
-# (granular automation token with publish access to @cadenya).
+# Publishes @cadenya/widgets to npm via TRUSTED PUBLISHING (GitHub OIDC):
+# no token secret — npm verifies this repo+workflow identity directly, and
+# provenance attestation comes for free. Fires on release publish or manual
+# dispatch.
 name: Publish NPM
 on:
   workflow_dispatch:
@@ -9,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish:
@@ -17,8 +19,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: https://registry.npmjs.org
+      - name: Ensure OIDC-capable npm
+        run: npm install -g npm@latest
       - run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
