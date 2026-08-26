@@ -230,8 +230,9 @@ export interface WidgetErrorEvent {
  *  events map to these through an explicit, exhaustive server-side projection;
  *  internal-only types (context compaction, memory reads, sub-agent
  *  bookkeeping) have no widget variant and are dropped. Nothing here carries
- *  tool configuration, tool arguments, server identities, operator details,
- *  or internal error strings.
+ *  tool configuration, server identities, operator details, or internal error
+ *  strings. Tool arguments cross this boundary only when an enabled tool set
+ *  overlay explicitly opts the matching tool in.
  */
 export type WidgetEvent =
   | WidgetEvent_UserMessage
@@ -244,12 +245,26 @@ export type WidgetEvent =
   | WidgetEvent_ToolError
   | WidgetEvent_Error
   | WidgetEvent_Cancelled
-  | WidgetEvent_TimedOut;
+  | WidgetEvent_TimedOut
+  | WidgetEvent_Finalized;
+
+/**
+ * WidgetFinalizedEvent: the conversation's agent produced its structured
+ *  output and the objective reached its terminal state. Only agents with an
+ *  output definition finalize — such an agent ends the conversation after one
+ *  turn, so a widget bound to one should treat this as the answer, not a
+ *  message to keep chatting past.
+ */
+export interface WidgetFinalizedEvent {
+  /**
+   * The structured output the agent produced, matching the shape of the
+   *  agent's output definition schema.
+   */
+  output?: Record<string, unknown>;
+}
 
 /**
  * WidgetTimedOutEvent: the conversation timed out after inactivity. Terminal.
- *  (There is no finalized variant: agents with structured output — the only
- *  path to finalization — cannot be bound to widgets.)
  */
 export interface WidgetTimedOutEvent {
 }
@@ -276,12 +291,18 @@ export interface WidgetToolApprovedEvent {
 }
 
 /**
- * WidgetToolCalledEvent reports that the agent invoked a tool. Arguments are
- *  never included.
+ * WidgetToolCalledEvent reports that the agent invoked a tool.
  */
 export interface WidgetToolCalledEvent {
   toolCallId: string;
   tool: WidgetToolReference;
+  /**
+   * The final arguments sent to the tool, after parameter actions were
+   *  applied. Present only when an enabled matching tool set overlay opts the
+   *  tool into exposing arguments in widget sessions. Arguments are omitted
+   *  by default because they may contain sensitive customer data.
+   */
+  arguments?: Record<string, unknown>;
 }
 
 /**
@@ -498,6 +519,21 @@ export interface WidgetEvent_Cancelled {
 export interface WidgetEvent_TimedOut {
   type: 'timedOut';
   timedOut: WidgetTimedOutEvent;
+  /**
+   * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
+   *  `Last-Event-ID` on reconnect to resume without duplication.
+   */
+  id: string;
+  /**
+   * The conversation this event belongs to.
+   */
+  conversationId: string;
+  createdAt: string;
+}
+
+export interface WidgetEvent_Finalized {
+  type: 'finalized';
+  finalized: WidgetFinalizedEvent;
   /**
    * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
    *  `Last-Event-ID` on reconnect to resume without duplication.
