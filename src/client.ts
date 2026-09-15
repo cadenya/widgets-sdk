@@ -19,7 +19,7 @@ export interface ClientOptions {
    * Defaults to 60000; a non-finite or <= 0 value disables the deadline.
    */
   timeout?: number;
-  /** Headers sent with every request. */
+  /** Additional request headers. Browsers supply their own User-Agent by default. */
   defaultHeaders?: Record<string, string>;
   /** Custom fetch implementation. */
   fetch?: typeof fetch;
@@ -49,7 +49,7 @@ export class CadenyaWidgets {
       authHeader: () => ({ Authorization: `Bearer ${apiKey}` }),
       maxRetries: options.maxRetries ?? 0,
       timeout: options.timeout,
-      defaultHeaders: { 'User-Agent': 'cadenyawidgets-typescript/1.1.0 (api 1.0)', ...options.defaultHeaders },
+      defaultHeaders: { ...nodeUserAgent('cadenyawidgets-typescript/1.1.1 (api 1.0)'), ...options.defaultHeaders },
       fetch: options.fetch,
       logger: options.logger,
       logLevel: options.logLevel,
@@ -58,6 +58,14 @@ export class CadenyaWidgets {
     this.config = new Config(this._client);
     this.conversations = new Conversations(this._client);
   }
+}
+
+// Browser-authored User-Agent headers require CORS permission. Only Node-compatible
+// runtimes receive the SDK default; browsers and workers use their native header.
+function nodeUserAgent(value: string): Record<string, string> {
+  const nodeVersion = (globalThis as { process?: { versions?: { node?: string } } })
+    .process?.versions?.node;
+  return nodeVersion ? { 'User-Agent': value } : {};
 }
 
 function readEnv(name: string): string | undefined {

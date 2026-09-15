@@ -26,7 +26,12 @@ export interface RequestOptions {
     lastEventId?: string;
 }
 export type QueryPrimitive = string | number | boolean;
-export type QueryValue = QueryPrimitive | QueryPrimitive[] | undefined | null;
+/**
+ * Query objects are flattened to dot-delimited paths. `object` is used here
+ * deliberately so generated named interfaces (which do not declare an index
+ * signature) remain assignable as query parameter values.
+ */
+export type QueryValue = QueryPrimitive | readonly QueryPrimitive[] | object | undefined | null;
 export interface RequestSpec {
     method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     path: string;
