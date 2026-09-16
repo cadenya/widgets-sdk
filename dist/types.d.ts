@@ -214,7 +214,7 @@ export interface WidgetErrorEvent {
  *  strings. Tool arguments cross this boundary only when an enabled tool set
  *  overlay explicitly opts the matching tool in.
  */
-export type WidgetEvent = WidgetEvent_UserMessage | WidgetEvent_AssistantMessage | WidgetEvent_ToolApprovalRequested | WidgetEvent_ToolApproved | WidgetEvent_ToolDenied | WidgetEvent_ToolCalled | WidgetEvent_ToolResult | WidgetEvent_ToolError | WidgetEvent_Error | WidgetEvent_Cancelled | WidgetEvent_TimedOut | WidgetEvent_Finalized;
+export type WidgetEvent = WidgetEvent_UserMessage | WidgetEvent_AssistantMessage | WidgetEvent_ToolApprovalRequested | WidgetEvent_ToolApproved | WidgetEvent_ToolDenied | WidgetEvent_ToolCalled | WidgetEvent_ToolResult | WidgetEvent_ToolError | WidgetEvent_Error | WidgetEvent_Cancelled | WidgetEvent_TimedOut | WidgetEvent_Finalized | WidgetEvent_Heartbeat | WidgetEvent_StateChanged;
 /**
  * WidgetFinalizedEvent: the conversation's agent produced its structured
  *  output and the objective reached its terminal state. Only agents with an
@@ -228,6 +228,23 @@ export interface WidgetFinalizedEvent {
      *  agent's output definition schema.
      */
     output?: Record<string, unknown>;
+}
+/**
+ * WidgetHeartbeatEvent mirrors objective heartbeat liveness. It is live-only,
+ *  absent from history, and never a reconnect checkpoint or state transition.
+ */
+export interface WidgetHeartbeatEvent {
+}
+export type WidgetObjectiveStateChangedEventFromState = 'WIDGET_OBJECTIVE_STATE_UNSPECIFIED' | 'WIDGET_OBJECTIVE_STATE_PENDING' | 'WIDGET_OBJECTIVE_STATE_RUNNING' | 'WIDGET_OBJECTIVE_STATE_WAITING' | 'WIDGET_OBJECTIVE_STATE_FAILED' | 'WIDGET_OBJECTIVE_STATE_CANCELLED' | 'WIDGET_OBJECTIVE_STATE_FINALIZED' | 'WIDGET_OBJECTIVE_STATE_TIMED_OUT';
+export type WidgetObjectiveStateChangedEventToState = 'WIDGET_OBJECTIVE_STATE_UNSPECIFIED' | 'WIDGET_OBJECTIVE_STATE_PENDING' | 'WIDGET_OBJECTIVE_STATE_RUNNING' | 'WIDGET_OBJECTIVE_STATE_WAITING' | 'WIDGET_OBJECTIVE_STATE_FAILED' | 'WIDGET_OBJECTIVE_STATE_CANCELLED' | 'WIDGET_OBJECTIVE_STATE_FINALIZED' | 'WIDGET_OBJECTIVE_STATE_TIMED_OUT';
+/**
+ * WidgetObjectiveStateChangedEvent mirrors a durable objective transition.
+ *  Internal status messages are intentionally omitted. Pending/running maps
+ *  to a responding conversation, waiting to open, and terminal states to closed.
+ */
+export interface WidgetObjectiveStateChangedEvent {
+    fromState: WidgetObjectiveStateChangedEventFromState;
+    toState: WidgetObjectiveStateChangedEventToState;
 }
 /**
  * WidgetTimedOutEvent: the conversation timed out after inactivity. Terminal.
@@ -327,8 +344,9 @@ export interface WidgetEvent_UserMessage {
     type: 'userMessage';
     userMessage: WidgetUserMessageEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -341,8 +359,9 @@ export interface WidgetEvent_AssistantMessage {
     type: 'assistantMessage';
     assistantMessage: WidgetAssistantMessageEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -355,8 +374,9 @@ export interface WidgetEvent_ToolApprovalRequested {
     type: 'toolApprovalRequested';
     toolApprovalRequested: WidgetToolApprovalRequestedEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -369,8 +389,9 @@ export interface WidgetEvent_ToolApproved {
     type: 'toolApproved';
     toolApproved: WidgetToolApprovedEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -383,8 +404,9 @@ export interface WidgetEvent_ToolDenied {
     type: 'toolDenied';
     toolDenied: WidgetToolDeniedEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -397,8 +419,9 @@ export interface WidgetEvent_ToolCalled {
     type: 'toolCalled';
     toolCalled: WidgetToolCalledEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -411,8 +434,9 @@ export interface WidgetEvent_ToolResult {
     type: 'toolResult';
     toolResult: WidgetToolResultEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -425,8 +449,9 @@ export interface WidgetEvent_ToolError {
     type: 'toolError';
     toolError: WidgetToolErrorEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -439,8 +464,9 @@ export interface WidgetEvent_Error {
     type: 'error';
     error: WidgetErrorEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -453,8 +479,9 @@ export interface WidgetEvent_Cancelled {
     type: 'cancelled';
     cancelled: WidgetCancelledEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -467,8 +494,9 @@ export interface WidgetEvent_TimedOut {
     type: 'timedOut';
     timedOut: WidgetTimedOutEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
@@ -481,8 +509,39 @@ export interface WidgetEvent_Finalized {
     type: 'finalized';
     finalized: WidgetFinalizedEvent;
     /**
-     * Unique event id (ULID). Doubles as the SSE `id:` — replay it as
-     *  `Last-Event-ID` on reconnect to resume without duplication.
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_Heartbeat {
+    type: 'heartbeat';
+    heartbeat: WidgetHeartbeatEvent;
+    /**
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
+     */
+    id: string;
+    /**
+     * The conversation this event belongs to.
+     */
+    conversationId: string;
+    createdAt: string;
+}
+export interface WidgetEvent_StateChanged {
+    type: 'stateChanged';
+    stateChanged: WidgetObjectiveStateChangedEvent;
+    /**
+     * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+     *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+     *  Transient heartbeats carry hb_ IDs in this payload only.
      */
     id: string;
     /**
