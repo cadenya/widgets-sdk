@@ -1,9 +1,12 @@
 # Publishes @cadenya/widgets to npm via TRUSTED PUBLISHING (GitHub OIDC):
 # no token secret — npm verifies this repo+workflow identity directly, and
-# provenance attestation comes for free. Fires on release publish or manual
-# dispatch.
+# provenance attestation comes for free. Release Please manages versions
+# and publishes in this workflow because GITHUB_TOKEN releases do not
+# trigger another workflow run.
 name: Publish NPM
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
   release:
     types: [published]
@@ -13,10 +16,27 @@ permissions:
   id-token: write
 
 jobs:
+  release-please:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - id: release
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4.4.1
+
   publish:
+    needs: release-please
+    if: always() && (github.event_name != 'push' || needs.release-please.outputs.release_created == 'true')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
