@@ -91,6 +91,21 @@ export interface Page {
     total?: number;
 }
 /**
+ * RenewWidgetSessionRequest has no session ID or credential in its body.
+ *  The verified bearer token identifies the existing session. The server
+ *  rechecks current session and authorization policy before issuing a token.
+ *  Token validation allows 60 seconds of clock skew: now must be strictly
+ *  before exp + 60 seconds. Hard session expiry has no tolerance. A token
+ *  beyond this window cannot renew even while the session remains active.
+ */
+export interface RenewWidgetSessionRequest {
+    /**
+     * Required workspace containing the authenticated session. Must match the
+     *  session resolved from the bearer token; never authorizes access by itself.
+     */
+    workspaceId?: string;
+}
+/**
  * Set tool call content request. Lets the embedding page supply the result
  *  of a bare tool call (one whose tool set has no execution adapter) — the
  *  widget-session flavor of the reverse-harness pattern, where client-side
@@ -111,6 +126,7 @@ export interface SetToolCallContentRequest {
      */
     content: string;
 }
+export type StatusDetails = WidgetSessionErrorInfo | GoogleProtobufAny;
 /**
  * The `Status` type defines a logical error model that is suitable for different programming environments, including REST APIs and RPC APIs. It is used by [gRPC](https://github.com/grpc). Each `Status` message contains three pieces of data: error code, error message, and error details. You can find out more about this error model and how to work with it in the [API Design Guide](https://cloud.google.com/apis/design/errors).
  */
@@ -126,7 +142,7 @@ export interface Status {
     /**
      * A list of messages that carry the error details.  There is a common set of message types for APIs to use.
      */
-    details?: Array<GoogleProtobufAny>;
+    details?: Array<StatusDetails>;
 }
 /**
  * Submit conversation feedback request — the visitor's rating of a
@@ -175,13 +191,10 @@ export interface WidgetConfig {
 }
 export type WidgetConversationState = 'STATE_UNSPECIFIED' | 'STATE_RESPONDING' | 'STATE_OPEN' | 'STATE_CLOSED';
 /**
- * WidgetConversation is one conversation between the session's visitor and
- *  the widget's agent. Conversations are scoped by the presenting token to the
- *  VISITOR: a session with a subject sees that subject's conversations on this
- *  widget; a session without one sees only the conversations it created
- *  itself. A conversation id from outside that scope is indistinguishable from
- *  one that does not exist. Tenant is a management-side grouping only — it is
- *  never a read scope on this surface.
+ * WidgetConversation is one conversation between a visitor and a widget's
+ *  agent. The presenting session must have a tenant and subject. Sessions for
+ *  that same identity share history on the same widget and agent, subject to
+ *  the current session's permissions. Other conversation IDs return not found.
  */
 export interface WidgetConversation {
     id: string;
@@ -245,6 +258,37 @@ export type WidgetObjectiveStateChangedEventToState = 'WIDGET_OBJECTIVE_STATE_UN
 export interface WidgetObjectiveStateChangedEvent {
     fromState: WidgetObjectiveStateChangedEventFromState;
     toState: WidgetObjectiveStateChangedEventToState;
+}
+/**
+ * WidgetSessionCredentials is the browser-safe projection of creation
+ *  credentials. Renewal returns the same fields, including exact token expiry
+ *  and immutable session expiry, without importing the management API module.
+ *  Responses containing credentials use Cache-Control: no-store.
+ */
+export interface WidgetSessionCredentials {
+    /**
+     * Canonical wsess_ identifier. Ordinary renewal cannot change the session.
+     */
+    sessionId: string;
+    /**
+     * Authoritative hostname, without a scheme or path. Use HTTPS with this
+     *  host; never construct it or accept a host change during renewal.
+     */
+    host: string;
+    /**
+     * Short-lived bearer credential for the widget host only.
+     */
+    token: string;
+    /**
+     * Exact token expiry, at most 15 minutes after issuance and never later
+     *  than session_expires_at. Equals JWT exp without the 60-second validation
+     *  tolerance added. Renew proactively before this timestamp.
+     */
+    tokenExpiresAt: string;
+    /**
+     * Immutable hard session expiry. Issuance never extends this deadline.
+     */
+    sessionExpiresAt: string;
 }
 /**
  * WidgetTimedOutEvent: the conversation timed out after inactivity. Terminal.
@@ -549,5 +593,21 @@ export interface WidgetEvent_StateChanged {
      */
     conversationId: string;
     createdAt: string;
+}
+/**
+ * TOKEN_EXPIRED identifies access-token expiry beyond the 60-second clock-skew tolerance. That token cannot renew; use already-installed newer credentials or require explicit app reauthentication. SESSION_* reasons are terminal. Never infer renewability from HTTP status alone.
+ */
+export type WidgetSessionErrorReason = 'TOKEN_EXPIRED' | 'SESSION_REVOKED' | 'SESSION_EXPIRED' | 'SESSION_EXHAUSTED';
+/**
+ * google.rpc.ErrorInfo detail for widget lifecycle failures. Match both domain and reason; ignore unknown reasons rather than renewing automatically.
+ */
+export interface WidgetSessionErrorInfo {
+    '@type': 'type.googleapis.com/google.rpc.ErrorInfo';
+    domain: 'api.cadenya.com';
+    reason: WidgetSessionErrorReason;
+    /**
+     * Optional non-sensitive context. Never contains tokens or secrets.
+     */
+    metadata?: Record<string, string>;
 }
 //# sourceMappingURL=types.d.ts.map

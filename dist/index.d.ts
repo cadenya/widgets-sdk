@@ -9,4 +9,5 @@ export type { ServerSentEvent } from './core/sse.js';
 export * from './types.js';
 export * from './resources/config.js';
 export * from './resources/conversations.js';
+export * from './resources/session.js';
 //# sourceMappingURL=index.d.ts.map

@@ -1,6 +1,7 @@
 import type { Logger, LogLevel } from './core/http.js';
 import { Config } from './resources/config.js';
 import { Conversations } from './resources/conversations.js';
+import { Session } from './resources/session.js';
 export interface ClientOptions {
     /** API key. Defaults to the CADENYAWIDGETS_API_KEY environment variable. */
     apiKey?: string;
@@ -27,6 +28,7 @@ export interface ClientOptions {
 export declare class CadenyaWidgets {
     readonly config: Config;
     readonly conversations: Conversations;
+    readonly session: Session;
     private readonly _client;
     constructor(options?: ClientOptions);
 }
