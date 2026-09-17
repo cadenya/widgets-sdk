@@ -64,3 +64,11 @@ Send the next message
 ```ts
 client.conversations.continue(id: string, params: ConversationContinueParams, options?: RequestOptions): APIPromise<WidgetConversation>
 ```
+
+## session
+
+Renew a widget session token
+
+```ts
+client.session.renewWidget(params: SessionRenewWidgetParams, options?: RequestOptions): APIPromise<WidgetSessionCredentials>
+```

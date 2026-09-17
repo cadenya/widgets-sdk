@@ -4,6 +4,7 @@ import { HttpClient } from './core/http.js';
 import type { Logger, LogLevel } from './core/http.js';
 import { Config } from './resources/config.js';
 import { Conversations } from './resources/conversations.js';
+import { Session } from './resources/session.js';
 
 export interface ClientOptions {
   /** API key. Defaults to the CADENYAWIDGETS_API_KEY environment variable. */
@@ -32,6 +33,7 @@ export interface ClientOptions {
 export class CadenyaWidgets {
   readonly config: Config;
   readonly conversations: Conversations;
+  readonly session: Session;
 
   private readonly _client: HttpClient;
 
@@ -49,7 +51,7 @@ export class CadenyaWidgets {
       authHeader: () => ({ Authorization: `Bearer ${apiKey}` }),
       maxRetries: options.maxRetries ?? 0,
       timeout: options.timeout,
-      defaultHeaders: { ...nodeUserAgent('cadenyawidgets-typescript/1.1.1 (api 1.0)'), ...options.defaultHeaders },
+      defaultHeaders: { ...nodeUserAgent('cadenyawidgets-typescript/1.3.0 (api 1.0)'), ...options.defaultHeaders },
       fetch: options.fetch,
       logger: options.logger,
       logLevel: options.logLevel,
@@ -57,6 +59,7 @@ export class CadenyaWidgets {
     });
     this.config = new Config(this._client);
     this.conversations = new Conversations(this._client);
+    this.session = new Session(this._client);
   }
 }
 
