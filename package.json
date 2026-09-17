@@ -13,12 +13,21 @@
     }
   },
   "sideEffects": false,
-  "publishConfig": { "access": "public" },
-  "repository": { "type": "git", "url": "https://github.com/cadenya/widgets-sdk" },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cadenya/widgets-sdk"
+  },
   "engines": {
     "node": ">=18"
   },
-  "files": ["dist", "src", "api.md"],
+  "files": [
+    "dist",
+    "src",
+    "api.md"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"
