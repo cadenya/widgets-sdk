@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/cadenya/widgets-sdk/compare/v1.3.0...v1.4.0) (2026-09-28)
+
+
+### Features
+
+* queue conversation messages while the agent is busy ([3dfb1e5](https://github.com/cadenya/widgets-sdk/commit/3dfb1e5e29f94c8aa8213be6b427c797cd79e934))
+
 ## [1.3.0](https://github.com/cadenya/widgets-sdk/compare/v1.2.0...v1.3.0) (2026-09-17)
 
 
