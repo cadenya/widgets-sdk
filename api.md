@@ -44,6 +44,16 @@ Submit conversation feedback
 ```ts
 client.conversations.submitFeedback(id: string, params: ConversationSubmitFeedbackParams, options?: RequestOptions): APIPromise<void>
 ```
+List queued messages
+
+```ts
+client.conversations.listQueuedMessages(id: string, params?: ConversationListQueuedMessagesParams, options?: RequestOptions): Promise<Page<WidgetQueuedMessage>>
+```
+Remove a queued message
+
+```ts
+client.conversations.removeQueuedMessage(id: string, params: ConversationRemoveQueuedMessageParams, options?: RequestOptions): APIPromise<WidgetQueuedMessage>
+```
 Approve a pending tool call
 
 ```ts
@@ -62,7 +72,7 @@ client.conversations.setToolCallContent(id: string, params: ConversationSetToolC
 Send the next message
 
 ```ts
-client.conversations.continue(id: string, params: ConversationContinueParams, options?: RequestOptions): APIPromise<WidgetConversation>
+client.conversations.continue(id: string, params: ConversationContinueParams, options?: RequestOptions): APIPromise<ContinueConversationResponse>
 ```
 
 ## session

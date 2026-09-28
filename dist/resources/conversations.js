@@ -95,6 +95,35 @@ export class Conversations {
         }, options);
     }
     /**
+     * List queued messages
+     *
+     * @example
+     * ```ts
+     * const page = await client.conversations.listQueuedMessages('_123');
+     * for await (const item of page) {
+     *   // auto-fetches every page
+     * }
+     * ```
+     */
+    async listQueuedMessages(id, params, options) {
+        const _base = snapshotParams(params);
+        const response = await this._client.request({ method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/queued_messages`, query: { limit: params?.limit, cursor: params?.cursor, state: params?.state } }, options);
+        return new Page(response.items ?? [], response.pagination?.nextCursor, (cursor) => this.listQueuedMessages(id, { ..._base, cursor: cursor }, options));
+    }
+    /**
+     * Remove a queued message
+     *
+     * @example
+     * ```ts
+     * const widgetQueuedMessage = await client.conversations.removeQueuedMessage('_123', { queuedMessageId: 'queued_message_123' });
+     * ```
+     */
+    removeQueuedMessage(id, params, options) {
+        return this._client.requestAPI(() => {
+            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/queued_messages/${pathSegment('queuedMessageId', params.queuedMessageId)}:remove` };
+        }, options);
+    }
+    /**
      * Approve a pending tool call
      *
      * @example
@@ -138,12 +167,12 @@ export class Conversations {
      *
      * @example
      * ```ts
-     * const widgetConversation = await client.conversations.continue('_123', { message: 'sample' });
+     * const continueConversationResponse = await client.conversations.continue('_123', { message: 'sample' });
      * ```
      */
     continue(id, params, options) {
         return this._client.requestAPI(() => {
-            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}:continue`, body: { message: params.message } };
+            return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}:continue`, body: { message: params.message, enqueue: params.enqueue } };
         }, options);
     }
 }

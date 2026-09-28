@@ -23,7 +23,20 @@ export interface ContinueConversationRequest {
      * The visitor's next message.
      */
     message: string;
+    /**
+     * When false, the conversation must be open and the message is sent
+     *  immediately. When true, an open conversation still receives the message
+     *  immediately; a conversation whose agent is responding queues it instead,
+     *  and the agent picks it up before its next reply. Queued messages can be
+     *  listed and removed until then.
+     */
+    enqueue?: boolean;
 }
+/**
+ * ContinueConversationResponse reports whether the message joined the
+ *  conversation immediately or was queued for the agent.
+ */
+export type ContinueConversationResponse = ContinueConversationResponse_Event | ContinueConversationResponse_QueuedMessage;
 /**
  * Create conversation request. The session, tenant, subject, secrets, labels,
  *  and pinned parameters all come from the presenting token's session — the
@@ -76,6 +89,13 @@ export interface ListConversationsResponse {
     pagination?: Page;
 }
 /**
+ * List queued messages response. Ordered oldest first.
+ */
+export interface ListQueuedMessagesResponse {
+    items: Array<WidgetQueuedMessage>;
+    pagination?: Page;
+}
+/**
  * Page carries pagination data for list responses. A deliberate local
  *  duplicate of the api module's Page — this package imports nothing from
  *  cadenya.api.v1 (see the workspace README).
@@ -89,6 +109,19 @@ export interface Page {
      * Total number of items matching the request.
      */
     total?: number;
+}
+/**
+ * Remove queued message request.
+ */
+export interface RemoveQueuedMessageRequest {
+    /**
+     * Conversation ID.
+     */
+    id?: string;
+    /**
+     * The queued message to remove.
+     */
+    queuedMessageId?: string;
 }
 /**
  * RenewWidgetSessionRequest has no session ID or credential in its body.
@@ -258,6 +291,34 @@ export type WidgetObjectiveStateChangedEventToState = 'WIDGET_OBJECTIVE_STATE_UN
 export interface WidgetObjectiveStateChangedEvent {
     fromState: WidgetObjectiveStateChangedEventFromState;
     toState: WidgetObjectiveStateChangedEventToState;
+}
+export type WidgetQueuedMessageState = 'STATE_UNSPECIFIED' | 'STATE_QUEUED' | 'STATE_SENT' | 'STATE_REMOVED' | 'STATE_DISCARDED';
+/**
+ * WidgetQueuedMessage is a visitor message sent while the agent was
+ *  responding. The agent picks queued messages up in order before its next
+ *  reply; until then a queued message can be removed and the agent never sees
+ *  it. Once sent, it arrives on the event stream as a userMessage event.
+ */
+export interface WidgetQueuedMessage {
+    id: string;
+    /**
+     * The conversation the message was sent to.
+     */
+    conversationId: string;
+    /**
+     * The message text.
+     */
+    content: string;
+    state: WidgetQueuedMessageState;
+    createdAt: string;
+    /**
+     * When the agent picked the message up. Unset until the message is sent.
+     */
+    sentAt?: string;
+    /**
+     * The userMessage event the message became once sent.
+     */
+    eventId?: string;
 }
 /**
  * WidgetSessionCredentials is the browser-safe projection of creation
@@ -594,6 +655,20 @@ export interface WidgetEvent_StateChanged {
     conversationId: string;
     createdAt: string;
 }
+export interface ContinueConversationResponse_Event {
+    type: 'event';
+    /**
+     * The userMessage event, when the conversation was open and the message was sent immediately.
+     */
+    event: WidgetEvent;
+}
+export interface ContinueConversationResponse_QueuedMessage {
+    type: 'queuedMessage';
+    /**
+     * The queued message, when the agent was responding and the message was queued.
+     */
+    queuedMessage: WidgetQueuedMessage;
+}
 /**
  * TOKEN_EXPIRED identifies access-token expiry beyond the 60-second clock-skew tolerance. That token cannot renew; use already-installed newer credentials or require explicit app reauthentication. SESSION_* reasons are terminal. Never infer renewability from HTTP status alone.
  */
@@ -610,4 +685,5 @@ export interface WidgetSessionErrorInfo {
      */
     metadata?: Record<string, string>;
 }
+export type WidgetConversationServiceListQueuedMessagesState = 'STATE_UNSPECIFIED' | 'STATE_QUEUED' | 'STATE_SENT' | 'STATE_REMOVED' | 'STATE_DISCARDED';
 //# sourceMappingURL=types.d.ts.map

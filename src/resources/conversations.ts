@@ -3,7 +3,7 @@
 import { HttpClient, RequestOptions, RequestSpec, APIPromise, pathSegment, snapshotParams } from '../core/http.js';
 import { Page } from '../core/pagination.js';
 import { Stream } from '../core/sse.js';
-import type { ListConversationEventsResponse, ListConversationsResponse, WidgetConversation, WidgetEvent } from '../types.js';
+import type { ContinueConversationResponse, ListConversationEventsResponse, ListConversationsResponse, ListQueuedMessagesResponse, WidgetConversation, WidgetConversationServiceListQueuedMessagesState, WidgetEvent, WidgetQueuedMessage } from '../types.js';
 
 export interface ConversationListParams {
   /**
@@ -46,6 +46,28 @@ export interface ConversationSubmitFeedbackParams {
   comment?: string;
 }
 
+export interface ConversationListQueuedMessagesParams {
+  /**
+   * Maximum number of results to return.
+   */
+  limit?: number;
+  /**
+   * Pagination cursor from previous response.
+   */
+  cursor?: string;
+  /**
+   * Only return messages in this state. When unset, messages in every state are returned.
+   */
+  state?: WidgetConversationServiceListQueuedMessagesState;
+}
+
+export interface ConversationRemoveQueuedMessageParams {
+  /**
+   * The queued message to remove.
+   */
+  queuedMessageId: string;
+}
+
 export interface ConversationApproveToolCallParams {
   /**
    * The tool call awaiting a decision, from the toolApprovalRequested event.
@@ -76,6 +98,14 @@ export interface ConversationContinueParams {
    * The visitor's next message.
    */
   message: string;
+  /**
+   * When false, the conversation must be open and the message is sent
+   *  immediately. When true, an open conversation still receives the message
+   *  immediately; a conversation whose agent is responding queues it instead,
+   *  and the agent picks it up before its next reply. Queued messages can be
+   *  listed and removed until then.
+   */
+  enqueue?: boolean;
 }
 
 export class Conversations {
@@ -175,6 +205,37 @@ export class Conversations {
   }
 
   /**
+   * List queued messages
+   * 
+   * @example
+   * ```ts
+   * const page = await client.conversations.listQueuedMessages('_123');
+   * for await (const item of page) {
+   *   // auto-fetches every page
+   * }
+   * ```
+   */
+  async listQueuedMessages(id: string, params?: ConversationListQueuedMessagesParams, options?: RequestOptions): Promise<Page<WidgetQueuedMessage>> {
+    const _base = snapshotParams(params);
+    const response = await this._client.request<ListQueuedMessagesResponse>({ method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/queued_messages`, query: { limit: params?.limit, cursor: params?.cursor, state: params?.state } }, options);
+    return new Page(response.items ?? [], response.pagination?.nextCursor, (cursor) => this.listQueuedMessages(id, { ..._base, cursor: cursor }, options));
+  }
+
+  /**
+   * Remove a queued message
+   * 
+   * @example
+   * ```ts
+   * const widgetQueuedMessage = await client.conversations.removeQueuedMessage('_123', { queuedMessageId: 'queued_message_123' });
+   * ```
+   */
+  removeQueuedMessage(id: string, params: ConversationRemoveQueuedMessageParams, options?: RequestOptions): APIPromise<WidgetQueuedMessage> {
+    return this._client.requestAPI<WidgetQueuedMessage>(() => {
+      return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}/queued_messages/${pathSegment('queuedMessageId', params.queuedMessageId)}:remove` };
+    }, options);
+  }
+
+  /**
    * Approve a pending tool call
    * 
    * @example
@@ -221,12 +282,12 @@ export class Conversations {
    * 
    * @example
    * ```ts
-   * const widgetConversation = await client.conversations.continue('_123', { message: 'sample' });
+   * const continueConversationResponse = await client.conversations.continue('_123', { message: 'sample' });
    * ```
    */
-  continue(id: string, params: ConversationContinueParams, options?: RequestOptions): APIPromise<WidgetConversation> {
-    return this._client.requestAPI<WidgetConversation>(() => {
-      return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}:continue`, body: { message: params.message } };
+  continue(id: string, params: ConversationContinueParams, options?: RequestOptions): APIPromise<ContinueConversationResponse> {
+    return this._client.requestAPI<ContinueConversationResponse>(() => {
+      return { method: 'POST', path: `/v1/conversations/${pathSegment('id', id)}:continue`, body: { message: params.message, enqueue: params.enqueue } };
     }, options);
   }
 }
