@@ -24,7 +24,7 @@ client.session.renewWidget({});
 client.session.renewWidget({workspaceId:'workspace',sessionId:'session'});
 const reasons: WidgetSessionErrorReason[] = ['TOKEN_EXPIRED','SESSION_REVOKED','SESSION_EXPIRED','SESSION_EXHAUSTED'];
 `);
-  const result=spawnSync('tsc',['--noEmit','--strict','--module','NodeNext','--moduleResolution','NodeNext','--target','ES2022','--lib','ES2022,DOM,DOM.Iterable',file],{encoding:'utf8'});
+  const result=spawnSync('tsc',['--noEmit','--strict','--module','NodeNext','--moduleResolution','NodeNext','--target','ES2022','--lib','ES2022,DOM,DOM.Iterable',file],{encoding:'utf8',cwd:temp});
   assert.ifError(result.error); assert.equal(result.status,0,result.stdout+result.stderr);
  } finally {rmSync(temp,{recursive:true,force:true});}
 });
