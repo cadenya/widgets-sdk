@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/cadenya/widgets-sdk/compare/v1.4.0...v1.6.0) (2026-10-28)
+
+
+### Features
+
+* accept client tools when a conversation is created ([178d65f](https://github.com/cadenya/widgets-sdk/commit/178d65ff005946fc5c64b1e0f636c876aa5be78e))
+
 ## [1.4.0](https://github.com/cadenya/widgets-sdk/compare/v1.3.0...v1.4.0) (2026-09-28)
 
 
