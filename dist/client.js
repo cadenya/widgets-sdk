@@ -20,7 +20,7 @@ export class CadenyaWidgets {
             authHeader: () => ({ Authorization: `Bearer ${apiKey}` }),
             maxRetries: options.maxRetries ?? 0,
             timeout: options.timeout,
-            defaultHeaders: { ...nodeUserAgent('cadenyawidgets-typescript/1.3.0 (api 1.0)'), ...options.defaultHeaders },
+            defaultHeaders: { ...nodeUserAgent('cadenyawidgets-typescript/1.6.0 (api 1.0)'), ...options.defaultHeaders },
             fetch: options.fetch,
             logger: options.logger,
             logLevel: options.logLevel,

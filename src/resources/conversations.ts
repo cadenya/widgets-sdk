@@ -3,7 +3,7 @@
 import { HttpClient, RequestOptions, RequestSpec, APIPromise, pathSegment, snapshotParams } from '../core/http.js';
 import { Page } from '../core/pagination.js';
 import { Stream } from '../core/sse.js';
-import type { ContinueConversationResponse, ListConversationEventsResponse, ListConversationsResponse, ListQueuedMessagesResponse, WidgetConversation, WidgetConversationServiceListQueuedMessagesState, WidgetEvent, WidgetQueuedMessage } from '../types.js';
+import type { ClientTools, ContinueConversationResponse, ListConversationEventsResponse, ListConversationsResponse, ListQueuedMessagesResponse, WidgetConversation, WidgetConversationServiceListQueuedMessagesState, WidgetEvent, WidgetQueuedMessage } from '../types.js';
 
 export interface ConversationListParams {
   /**
@@ -21,6 +21,14 @@ export interface ConversationCreateParams {
    * The visitor's opening message.
    */
   message: string;
+  /**
+   * Tools the page defines and executes for this conversation. Only these
+   *  are loaded alongside the agent's own tools; a client tool replaces an
+   *  agent tool with the same function name. Each call arrives as a
+   *  toolCalled event carrying its arguments, and the page reports the
+   *  result with SetToolCallContent.
+   */
+  clientTools?: ClientTools;
 }
 
 export interface ConversationListEventsParams {
@@ -32,6 +40,15 @@ export interface ConversationListEventsParams {
    * Pagination cursor from previous response.
    */
   cursor?: string;
+}
+
+export interface ConversationStreamEventsParams {
+  /**
+   * Also stream transient assistantMessageDelta events: the assistant's text
+   *  as it is generated, ahead of the durable assistantMessage. Off by
+   *  default.
+   */
+  includeDeltas?: boolean;
 }
 
 export interface ConversationSubmitFeedbackParams {
@@ -138,7 +155,7 @@ export class Conversations {
    */
   create(params: ConversationCreateParams, options?: RequestOptions): APIPromise<WidgetConversation> {
     return this._client.requestAPI<WidgetConversation>(() => {
-      return { method: 'POST', path: `/v1/conversations`, body: { message: params.message } };
+      return { method: 'POST', path: `/v1/conversations`, body: { message: params.message, clientTools: params.clientTools } };
     }, options);
   }
 
@@ -184,8 +201,8 @@ export class Conversations {
    * }
    * ```
    */
-  async streamEvents(id: string, options?: RequestOptions): Promise<Stream<WidgetEvent>> {
-    const _spec: RequestSpec = { method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, stream: true };
+  async streamEvents(id: string, params?: ConversationStreamEventsParams, options?: RequestOptions): Promise<Stream<WidgetEvent>> {
+    const _spec: RequestSpec = { method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, query: { includeDeltas: params?.includeDeltas }, stream: true };
     const response = await this._client.rawRequest(_spec, options);
     return new Stream<WidgetEvent>(response, options?.signal, options?.lastEventId, ['ping', 'open'], options?.reconnect === false ? undefined : (lastEventId, signal) => this._client.rawRequest(_spec, { ...options, lastEventId, signal }));
   }

@@ -1,7 +1,7 @@
 import { HttpClient, RequestOptions, APIPromise } from '../core/http.js';
 import { Page } from '../core/pagination.js';
 import { Stream } from '../core/sse.js';
-import type { ContinueConversationResponse, WidgetConversation, WidgetConversationServiceListQueuedMessagesState, WidgetEvent, WidgetQueuedMessage } from '../types.js';
+import type { ClientTools, ContinueConversationResponse, WidgetConversation, WidgetConversationServiceListQueuedMessagesState, WidgetEvent, WidgetQueuedMessage } from '../types.js';
 export interface ConversationListParams {
     /**
      * Maximum number of results to return.
@@ -17,6 +17,14 @@ export interface ConversationCreateParams {
      * The visitor's opening message.
      */
     message: string;
+    /**
+     * Tools the page defines and executes for this conversation. Only these
+     *  are loaded alongside the agent's own tools; a client tool replaces an
+     *  agent tool with the same function name. Each call arrives as a
+     *  toolCalled event carrying its arguments, and the page reports the
+     *  result with SetToolCallContent.
+     */
+    clientTools?: ClientTools;
 }
 export interface ConversationListEventsParams {
     /**
@@ -27,6 +35,14 @@ export interface ConversationListEventsParams {
      * Pagination cursor from previous response.
      */
     cursor?: string;
+}
+export interface ConversationStreamEventsParams {
+    /**
+     * Also stream transient assistantMessageDelta events: the assistant's text
+     *  as it is generated, ahead of the durable assistantMessage. Off by
+     *  default.
+     */
+    includeDeltas?: boolean;
 }
 export interface ConversationSubmitFeedbackParams {
     /**
@@ -151,7 +167,7 @@ export declare class Conversations {
      * }
      * ```
      */
-    streamEvents(id: string, options?: RequestOptions): Promise<Stream<WidgetEvent>>;
+    streamEvents(id: string, params?: ConversationStreamEventsParams, options?: RequestOptions): Promise<Stream<WidgetEvent>>;
     /**
      * Submit conversation feedback
      *

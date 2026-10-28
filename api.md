@@ -37,7 +37,7 @@ client.conversations.listEvents(id: string, params?: ConversationListEventsParam
 Stream conversation events
 
 ```ts
-client.conversations.streamEvents(id: string, options?: RequestOptions): Promise<Stream<WidgetEvent>>
+client.conversations.streamEvents(id: string, params?: ConversationStreamEventsParams, options?: RequestOptions): Promise<Stream<WidgetEvent>>
 ```
 Submit conversation feedback
 

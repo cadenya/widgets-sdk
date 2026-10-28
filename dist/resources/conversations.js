@@ -33,7 +33,7 @@ export class Conversations {
      */
     create(params, options) {
         return this._client.requestAPI(() => {
-            return { method: 'POST', path: `/v1/conversations`, body: { message: params.message } };
+            return { method: 'POST', path: `/v1/conversations`, body: { message: params.message, clientTools: params.clientTools } };
         }, options);
     }
     /**
@@ -76,8 +76,8 @@ export class Conversations {
      * }
      * ```
      */
-    async streamEvents(id, options) {
-        const _spec = { method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, stream: true };
+    async streamEvents(id, params, options) {
+        const _spec = { method: 'GET', path: `/v1/conversations/${pathSegment('id', id)}/events:stream`, query: { includeDeltas: params?.includeDeltas }, stream: true };
         const response = await this._client.rawRequest(_spec, options);
         return new Stream(response, options?.signal, options?.lastEventId, ['ping', 'open'], options?.reconnect === false ? undefined : (lastEventId, signal) => this._client.rawRequest(_spec, { ...options, lastEventId, signal }));
     }

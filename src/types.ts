@@ -15,6 +15,45 @@ export interface ApproveToolCallRequest {
 }
 
 /**
+ * A tool the page defines and executes. The model calls it by name; the page
+ *  receives the call as a toolCalled event and reports the result with
+ *  SetToolCallContent.
+ */
+export interface ClientToolDefinition {
+  /**
+   * The function name the model calls, also the name the page matches
+   *  calls on. Letters, digits, "_" and "-", at most 64 characters,
+   *  neither starting nor ending with "_".
+   */
+  name: string;
+  /**
+   * What the tool does, shown to the model.
+   */
+  description?: string;
+  /**
+   * JSON Schema for the tool's arguments. Omitted means the tool takes no
+   *  arguments.
+   */
+  parameters?: Record<string, unknown>;
+  /**
+   * When true, each call waits for the visitor to approve it before the
+   *  page executes it.
+   */
+  requiresApproval?: boolean;
+}
+
+/**
+ * The tools a page defines and executes for one conversation, and the
+ *  settings that apply to them.
+ */
+export interface ClientTools {
+  /**
+   * The tool definitions. Names must be unique within the list.
+   */
+  definitions: Array<ClientToolDefinition>;
+}
+
+/**
  * Continue conversation request.
  */
 export interface ContinueConversationRequest {
@@ -46,14 +85,22 @@ export type ContinueConversationResponse =
 
 /**
  * Create conversation request. The session, tenant, subject, secrets, labels,
- *  and pinned parameters all come from the presenting token's session — the
- *  browser asserts nothing.
+ *  and pinned parameters all come from the presenting token's session. The
+ *  browser asserts only the opening message and the client tools it executes.
  */
 export interface CreateConversationRequest {
   /**
    * The visitor's opening message.
    */
   message: string;
+  /**
+   * Tools the page defines and executes for this conversation. Only these
+   *  are loaded alongside the agent's own tools; a client tool replaces an
+   *  agent tool with the same function name. Each call arrives as a
+   *  toolCalled event carrying its arguments, and the page reports the
+   *  result with SetToolCallContent.
+   */
+  clientTools?: ClientTools;
 }
 
 /**
@@ -221,12 +268,57 @@ export interface SubmitConversationFeedbackRequest {
 }
 
 /**
- * WidgetAssistantMessageEvent is a message from the agent. Content may
- *  arrive incrementally: later events for the same turn replace earlier
- *  partial content.
+ * WidgetAssistantMessageDeltaEvent is a fragment of the assistant's text as
+ *  the model generates it, sent only on streams that set includeDeltas. It is
+ *  transient: absent from history, never a reconnect checkpoint, and its dlt_
+ *  ID is not a Last-Event-ID cursor.
+ * 
+ *  A stream sends a completion's fragments only when it can send all of them:
+ *  from the first fragment (offset 0), with none missing. A client that
+ *  connects mid-completion sees no fragments for it and renders the durable
+ *  assistantMessage when it arrives. Fragments always arrive after the event
+ *  whose sequence is afterSequence.
+ * 
+ *  Concatenate fragments that share a completion ID in arrival order, then
+ *  replace them with the assistantMessage carrying the same completion ID. A
+ *  retried completion gets a new completion ID, so drop fragments whose
+ *  completion ID never receives an assistantMessage, such as when the
+ *  conversation errors, is cancelled, or the stream reconnects.
+ */
+export interface WidgetAssistantMessageDeltaEvent {
+  /**
+   * Identifies the model completion this fragment belongs to.
+   */
+  completionId: string;
+  /**
+   * The text generated since the previous fragment for this completion.
+   */
+  text: string;
+  /**
+   * Where this fragment starts within the completion's text, in UTF-8
+   *  bytes. The first fragment of a completion has offset 0.
+   */
+  offset: number;
+  /**
+   * The conversation's latest event sequence when the completion started.
+   *  The fragment belongs after that event in the timeline.
+   */
+  afterSequence: number;
+}
+
+/**
+ * WidgetAssistantMessageEvent is a message from the agent. When the stream
+ *  requested deltas, it replaces the assistantMessageDelta fragments that
+ *  share its completion ID.
  */
 export interface WidgetAssistantMessageEvent {
   content: string;
+  /**
+   * Identifies the model completion that produced this message.
+   *  assistantMessageDelta fragments for it carry the same value. Empty on
+   *  messages recorded before completions were identified.
+   */
+  completionId?: string;
 }
 
 /**
@@ -303,7 +395,8 @@ export type WidgetEvent =
   | WidgetEvent_TimedOut
   | WidgetEvent_Finalized
   | WidgetEvent_Heartbeat
-  | WidgetEvent_StateChanged;
+  | WidgetEvent_StateChanged
+  | WidgetEvent_AssistantMessageDelta;
 
 /**
  * WidgetFinalizedEvent: the conversation's agent produced its structured
@@ -325,6 +418,11 @@ export interface WidgetFinalizedEvent {
  *  absent from history, and never a reconnect checkpoint or state transition.
  */
 export interface WidgetHeartbeatEvent {
+  /**
+   * The conversation's latest committed event sequence when the pulse was
+   *  emitted.
+   */
+  lastSequence?: number;
 }
 
 export type WidgetObjectiveStateChangedEventFromState = 'WIDGET_OBJECTIVE_STATE_UNSPECIFIED' | 'WIDGET_OBJECTIVE_STATE_PENDING' | 'WIDGET_OBJECTIVE_STATE_RUNNING' | 'WIDGET_OBJECTIVE_STATE_WAITING' | 'WIDGET_OBJECTIVE_STATE_FAILED' | 'WIDGET_OBJECTIVE_STATE_CANCELLED' | 'WIDGET_OBJECTIVE_STATE_FINALIZED' | 'WIDGET_OBJECTIVE_STATE_TIMED_OUT';
@@ -481,6 +579,11 @@ export interface WidgetToolReference {
    * The tool's name as the workspace configured it (e.g. "FetchOrderDetails").
    */
   name: string;
+  /**
+   * Whether the tool is a client tool the page defined when it created the
+   *  conversation. The page matches calls to client tools by name.
+   */
+  clientTool?: boolean;
 }
 
 /**
@@ -512,7 +615,8 @@ export interface WidgetEvent_UserMessage {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -520,6 +624,13 @@ export interface WidgetEvent_UserMessage {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_AssistantMessage {
@@ -528,7 +639,8 @@ export interface WidgetEvent_AssistantMessage {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -536,6 +648,13 @@ export interface WidgetEvent_AssistantMessage {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_ToolApprovalRequested {
@@ -544,7 +663,8 @@ export interface WidgetEvent_ToolApprovalRequested {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -552,6 +672,13 @@ export interface WidgetEvent_ToolApprovalRequested {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_ToolApproved {
@@ -560,7 +687,8 @@ export interface WidgetEvent_ToolApproved {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -568,6 +696,13 @@ export interface WidgetEvent_ToolApproved {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_ToolDenied {
@@ -576,7 +711,8 @@ export interface WidgetEvent_ToolDenied {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -584,6 +720,13 @@ export interface WidgetEvent_ToolDenied {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_ToolCalled {
@@ -592,7 +735,8 @@ export interface WidgetEvent_ToolCalled {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -600,6 +744,13 @@ export interface WidgetEvent_ToolCalled {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_ToolResult {
@@ -608,7 +759,8 @@ export interface WidgetEvent_ToolResult {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -616,6 +768,13 @@ export interface WidgetEvent_ToolResult {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_ToolError {
@@ -624,7 +783,8 @@ export interface WidgetEvent_ToolError {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -632,6 +792,13 @@ export interface WidgetEvent_ToolError {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_Error {
@@ -640,7 +807,8 @@ export interface WidgetEvent_Error {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -648,6 +816,13 @@ export interface WidgetEvent_Error {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_Cancelled {
@@ -656,7 +831,8 @@ export interface WidgetEvent_Cancelled {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -664,6 +840,13 @@ export interface WidgetEvent_Cancelled {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_TimedOut {
@@ -672,7 +855,8 @@ export interface WidgetEvent_TimedOut {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -680,6 +864,13 @@ export interface WidgetEvent_TimedOut {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_Finalized {
@@ -688,7 +879,8 @@ export interface WidgetEvent_Finalized {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -696,6 +888,13 @@ export interface WidgetEvent_Finalized {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_Heartbeat {
@@ -704,7 +903,8 @@ export interface WidgetEvent_Heartbeat {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -712,6 +912,13 @@ export interface WidgetEvent_Heartbeat {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface WidgetEvent_StateChanged {
@@ -720,7 +927,8 @@ export interface WidgetEvent_StateChanged {
   /**
    * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
    *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
-   *  Transient heartbeats carry hb_ IDs in this payload only.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
    */
   id: string;
   /**
@@ -728,6 +936,37 @@ export interface WidgetEvent_StateChanged {
    */
   conversationId: string;
   createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
+}
+
+export interface WidgetEvent_AssistantMessageDelta {
+  type: 'assistantMessageDelta';
+  assistantMessageDelta: WidgetAssistantMessageDeltaEvent;
+  /**
+   * Unique event id (prefixed ULID). Only durable objevt_ IDs are emitted
+   *  as SSE `id:` fields and accepted as Last-Event-ID reconnect cursors.
+   *  Transient heartbeats (hb_) and text deltas (dlt_) carry their IDs in
+   *  this payload only.
+   */
+  id: string;
+  /**
+   * The conversation this event belongs to.
+   */
+  conversationId: string;
+  createdAt: string;
+  /**
+   * The event's commit-ordered position in its conversation, starting at
+   *  1. Sequences are gapless, and streams deliver events in sequence
+   *  order. Unset on live-only heartbeats and assistant message deltas; a
+   *  delta's place is after the event at its afterSequence.
+   */
+  sequence?: number;
 }
 
 export interface ContinueConversationResponse_Event {
